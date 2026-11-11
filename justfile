@@ -14,26 +14,18 @@ app_config := env("HOME") / ".config/herdr-app/cockpit.json"
 default:
     @just --list
 
-# The git remote that points at the fork.
-[private]
-fork-remote:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    remote=$(git remote -v | awk -v f="{{ fork }}" 'index($2, f) && $3 == "(fetch)" { print $1; exit }')
-    [ -n "$remote" ] || { echo "no git remote points at {{ fork }}" >&2; exit 1; }
-    echo "$remote"
-
 # Desktop: reset this checkout to the fork's desk and install its mod, keeping a remote-desk cockpit.json.
 desk-mac:
     #!/usr/bin/env bash
     set -euo pipefail
-    cd "{{ justfile_directory() }}"
+    cd "$(git -C "{{ invocation_directory() }}" rev-parse --show-toplevel)"
     if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
       echo "the checkout has local changes; desk-mac resets it to desk, so commit or stash them first" >&2
       git status --short --untracked-files=no >&2
       exit 1
     fi
-    remote=$(just fork-remote)
+    remote=$(git remote -v | awk -v f="{{ fork }}" 'index($2, f) && $3 == "(fetch)" { print $1; exit }')
+    [ -n "$remote" ] || { echo "no git remote points at {{ fork }}" >&2; exit 1; }
     git fetch -q "$remote" desk
     git checkout -q -B desk "$remote/desk"
     echo "desk at $(git log --oneline -1)"
@@ -54,9 +46,10 @@ desk-mac:
 desk-server:
     #!/usr/bin/env bash
     set -euo pipefail
-    repo="{{ justfile_directory() }}"
+    repo=$(git -C "{{ invocation_directory() }}" rev-parse --show-toplevel)
     cd "$repo"
-    remote=$(just fork-remote)
+    remote=$(git remote -v | awk -v f="{{ fork }}" 'index($2, f) && $3 == "(fetch)" { print $1; exit }')
+    [ -n "$remote" ] || { echo "no git remote points at {{ fork }}" >&2; exit 1; }
     git fetch -q "$remote" desk
     work=$(mktemp -d /tmp/cockpit-desk-build.XXXXXX)
     trap 'git -C "$repo" worktree remove --force "$work" 2>/dev/null || true; git -C "$repo" worktree prune' EXIT
