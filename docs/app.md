@@ -392,7 +392,8 @@ dead daemon left behind (older than 60 seconds) reads as down. The space has no 
   "line": {"text": "3 running · 2 queued · 1 held · 17/27 GiB", "tone": "destructive" | "warning" | null},
   "badge": {"count": 2, "tone": "destructive"},              // failed in the last hour, else waiting long, else "!"; null when all is well
   "pool": {"text": "17.0 / 27.0 GiB", "ratio": 0.63, "cpus_text": "9 / 16 CPU", "cpus_ratio": 0.56},
-  "host": {"text": "10.8 / 31.1 GiB", "ratio": 0.35, "pressure_closed": false, "guard_active": false},
+  "host": {"text": "10.8 / 31.1 GiB", "ratio": 0.35, "pressure_closed": false, "guard_cutting": false,
+           "guard_ceiling": "22.5 GiB"},                       // guard_ceiling: null before the guard first writes one
   "head": "the queue waits on memory: …", "counts": {"running": 3, "queued": 2, "reservations": 1, "recent": 5},
   "running": [Item], "queued": [Item], "reservations": [Item], "recent": [Item],
   "day": {"text": "27/31 ok", "failed": 3, "oom": 1, "wait_median": "0s", "run_total": "1h 30m", …}
@@ -404,8 +405,9 @@ dead daemon left behind (older than 60 seconds) reads as down. The space has no 
 ```
 
 The line turns red when a task failed, ran out of memory or timed out in the last hour, and yellow while aq closed
-admission on memory pressure, its host guard trims the queue, or an item has waited over five minutes. Memory reads in
-tenths of a GiB (MiB below one) and times to the minute, so the model moves only when something you would see does.
+admission on memory pressure, its host guard cuts aq's slice below what aq promised running work, or an item has waited
+over five minutes. A guard ceiling alone is no warning: the pool tile shows it as a number. Memory reads in tenths of a
+GiB (MiB below one) and times to the minute, so the model moves only when something you would see does.
 
 `aq-log {id, stream: "stdout" | "stderr" | "result", tail}` is one item's output (`aq logs`) or how it ended
 (`aq result`), as `{id, stream, text, error}`. Actions (`act("aq", action, [id, ttl?])`): `cancel`, `extend` (30m by

@@ -29,7 +29,8 @@ expression: "serde_json::to_string_pretty(&model(Source::Live(fixture()), now())
   },
   "head": "the queue waits on pool memory: needs 6.0 GiB, 3.2 GiB free in the pool",
   "host": {
-    "guard_active": false,
+    "guard_ceiling": "22.5 GiB",
+    "guard_cutting": false,
     "pressure_closed": false,
     "ratio": 0.35,
     "text": "10.8 / 31.1 GiB"

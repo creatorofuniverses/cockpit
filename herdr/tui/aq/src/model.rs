@@ -258,7 +258,8 @@ pub fn model(source: Source, now: DateTime<Utc>) -> Value {
     let (committed, pool_mem) = (num(&pool["memory"]), num(&pool["pool_memory"]));
     let (cpus, pool_cpus) = (num(&pool["cpus"]), num(&pool["pool_cpus"]));
     let pressure = host["pressure_closed"].as_bool().unwrap_or(false);
-    let guard = host["guard_active"].as_bool().unwrap_or(false);
+    let cutting = host["guard_cutting"].as_bool().unwrap_or(false);
+    let ceiling = num(&host["guard_ceiling"]);
 
     let active = items.iter().filter(|i| text(&i["kind"]) != "reservation" && ACTIVE.contains(&text(&i["state"]))).count();
     let late = queued.iter().filter(|q| q["late"] == true).count();
@@ -282,7 +283,7 @@ pub fn model(source: Source, now: DateTime<Utc>) -> Value {
     };
     let tone = if failed > 0 {
         Some("destructive")
-    } else if pressure || guard || late > 0 {
+    } else if pressure || cutting || late > 0 {
         Some("warning")
     } else {
         None
@@ -297,12 +298,13 @@ pub fn model(source: Source, now: DateTime<Utc>) -> Value {
         "state": "live",
         "daemon": text(&snap["daemon"]["version"]),
         "line": {"text": line_text, "tone": tone},
-        "badge": badge(failed, late, pressure || guard),
+        "badge": badge(failed, late, pressure || cutting),
         "host": {
             "text": gib_pair(total - available, total),
             "ratio": ratio(total - available, total),
             "pressure_closed": pressure,
-            "guard_active": guard,
+            "guard_cutting": cutting,
+            "guard_ceiling": if ceiling > 0.0 { json!(gib(ceiling)) } else { Value::Null },
         },
         "pool": {
             "text": gib_pair(committed, pool_mem),
@@ -400,6 +402,23 @@ mod tests {
         snap["items"].as_array_mut().unwrap().retain(|i| i["state"] != "QUEUED");
         let m = model(Source::Live(snap), now());
         assert_eq!((m["badge"].clone(), m["line"]["text"].as_str()), (Value::Null, Some("3 running · 1 held · 17/27 GiB")));
+    }
+
+    #[test]
+    fn the_host_guard_warns_only_when_it_cuts_below_what_aq_promised() {
+        let mut snap = fixture();
+        snap["recent"] = json!([]);
+        snap["items"].as_array_mut().unwrap().retain(|i| i["state"] != "QUEUED");
+        let calm = model(Source::Live(snap.clone()), now());
+        assert_eq!((&calm["badge"], &calm["line"]["tone"], calm["host"]["guard_ceiling"].as_str()), (&Value::Null, &Value::Null, Some("22.5 GiB")));
+        snap["host"]["guard_cutting"] = json!(true);
+        let cut = model(Source::Live(snap.clone()), now());
+        assert_eq!((cut["badge"]["count"].as_str(), cut["line"]["tone"].as_str()), (Some("!"), Some("warning")));
+        let host = snap["host"].as_object_mut().unwrap();
+        host.remove("guard_cutting");
+        host.remove("guard_ceiling");
+        let old = model(Source::Live(snap), now());
+        assert_eq!((old["host"]["guard_cutting"].as_bool(), &old["host"]["guard_ceiling"], &old["badge"]), (Some(false), &Value::Null, &Value::Null));
     }
 
     #[test]

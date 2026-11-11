@@ -2,7 +2,7 @@
   "version": 1,
   "at": "2026-11-11T09:29:50Z",
   "daemon": {"version": "0.9.0"},
-  "host": {"mem_total": 33352466432, "mem_available": 21740765184, "psi_full_avg10": 0.0, "pressure_closed": false, "guard_active": false},
+  "host": {"mem_total": 33352466432, "mem_available": 21740765184, "psi_full_avg10": 0.0, "pressure_closed": false, "guard_active": true, "guard_ceiling": 24159191040, "guard_cutting": false},
   "pool": {"pool_memory": 28991029248, "pool_cpus": 16, "memory": 18253611008, "cpus": 9, "tasks_expected": 0, "tasks_unconsumed": 0, "stands": 3221225472, "stands_unconsumed": 966367641, "budgets": 4294967296, "budgets_unconsumed": 2362232012, "teardown_unconsumed": 0},
   "queue": {"queued": 2, "running": 3, "held": 1, "head_id": "5b1e0c44-8f2a-4d3b-9a61-0c7e2f4d9b10", "blocked_by": "pool_memory", "blocked_detail": "needs 6.0 GiB, 3.2 GiB free in the pool"},
   "items": [

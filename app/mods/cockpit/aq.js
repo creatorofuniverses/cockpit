@@ -289,7 +289,7 @@ export default class Aq {
 
   tiles(k) {
     const m = this.model;
-    const flags = [m.host.pressure_closed ? "admission closed: memory pressure" : null, m.host.guard_active ? "host guard is trimming aq" : null].filter(Boolean);
+    const flags = [m.host.pressure_closed ? "admission closed: memory pressure" : null, m.host.guard_cutting ? "host guard is cutting aq below its commitments" : null].filter(Boolean);
     const bar = (label, text, ratio, color) =>
       v_flex()
         .gap(4)
@@ -312,6 +312,7 @@ export default class Aq {
         .child(bar("Memory committed", m.pool.text, m.pool.ratio, memColor))
         .child(bar("CPU committed", m.pool.cpus_text, m.pool.cpus_ratio, k.info ?? k.primary))
         .child(bar("Host memory in use", m.host.text, m.host.ratio, m.host.ratio >= 0.9 ? k.destructive : k.mutedFg))
+        .when(Boolean(m.host.guard_ceiling), (e) => e.child(div().text_size(TEXT.xs).text_color(k.mutedFg).child(`Host guard caps aq at ${m.host.guard_ceiling}`)))
         .when(flags.length > 0, (e) => e.child(h_flex().gap(6).flex_wrap().children(flags.map((f, i) => Badge(f, "warning", { id: `aq-flag-${i}`, icon: "triangle-alert" }))))),
       Metric("aq-tile-running", {
         label: "Running",
