@@ -4,7 +4,7 @@ expression: "serde_json::to_string_pretty(&model(Source::Live(fixture()), now())
 ---
 {
   "badge": {
-    "count": 5,
+    "count": 2,
     "tone": "destructive"
   },
   "counts": {

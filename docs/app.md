@@ -390,7 +390,7 @@ dead daemon left behind (older than 60 seconds) reads as down. The space has no 
 {
   "state": "live" | "down" | "absent", "error": "…",          // down: why; absent: no aq, the space and line hide
   "line": {"text": "3 running · 2 queued · 1 held · 17/27 GiB", "tone": "destructive" | "warning" | null},
-  "badge": {"count": 5, "tone": "destructive"},              // what runs and waits; null when nothing does
+  "badge": {"count": 2, "tone": "destructive"},              // failed in the last hour, else waiting long, else "!"; null when all is well
   "pool": {"text": "17.0 / 27.0 GiB", "ratio": 0.63, "cpus_text": "9 / 16 CPU", "cpus_ratio": 0.56},
   "host": {"text": "10.8 / 31.1 GiB", "ratio": 0.35, "pressure_closed": false, "guard_active": false},
   "head": "the queue waits on memory: …", "counts": {"running": 3, "queued": 2, "reservations": 1, "recent": 5},

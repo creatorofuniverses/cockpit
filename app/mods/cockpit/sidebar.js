@@ -39,7 +39,7 @@ function appBadge(app, v) {
   }
   if (app === "routines") return of(v.tiles?.unread, v.tiles?.failing ? "destructive" : "warning");
   if (app === "mail") return of(v.counts?.needs, "warning");
-  if (app === "aq") return v.badge ? { count: v.badge.count, tone: v.badge.tone ?? "info" } : null;
+  if (app === "aq") return v.badge ? { count: v.badge.count, tone: v.badge.tone } : null;
   if (app === "meetings") {
     const now = Date.now();
     const left = (v.meetings ?? []).filter((m) => m.day === v.today && (m.end ?? 0) > now).length;

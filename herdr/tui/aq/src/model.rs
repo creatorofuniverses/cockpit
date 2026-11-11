@@ -213,6 +213,17 @@ fn reservation(item: &Value, nested: Vec<Value>, now: DateTime<Utc>) -> Value {
     row
 }
 
+/// The sidebar's bubble, only when the space wants a look: the tasks that failed in the last hour in red, else the items
+/// waiting over five minutes in yellow, else a yellow "!" while aq holds the queue back; null when all is well.
+fn badge(failed: usize, late: usize, held_back: bool) -> Value {
+    match (failed, late, held_back) {
+        (f, _, _) if f > 0 => json!({"count": f, "tone": "destructive"}),
+        (_, l, _) if l > 0 => json!({"count": l, "tone": "warning"}),
+        (_, _, true) => json!({"count": "!", "tone": "warning"}),
+        _ => Value::Null,
+    }
+}
+
 /// The model for whatever the source gave: `{state: "absent"}`, `{state: "down", error}`, or the whole dashboard.
 pub fn model(source: Source, now: DateTime<Utc>) -> Value {
     let snap = match source {
@@ -250,8 +261,8 @@ pub fn model(source: Source, now: DateTime<Utc>) -> Value {
     let guard = host["guard_active"].as_bool().unwrap_or(false);
 
     let active = items.iter().filter(|i| text(&i["kind"]) != "reservation" && ACTIVE.contains(&text(&i["state"]))).count();
-    let late = queued.iter().any(|q| q["late"] == true);
-    let failed_lately = recent_items.iter().any(|i| is_failure(i) && since(&i["ended_at"], now).is_some_and(|s| s <= FRESH_FAILURE_SECS as f64));
+    let late = queued.iter().filter(|q| q["late"] == true).count();
+    let failed = recent_items.iter().filter(|i| is_failure(i) && since(&i["ended_at"], now).is_some_and(|s| s <= FRESH_FAILURE_SECS as f64)).count();
     let day = &snap["day"];
     let finished = day["finished"].as_u64().unwrap_or(0);
     let succeeded = day["succeeded"].as_u64().unwrap_or(0);
@@ -269,14 +280,13 @@ pub fn model(source: Source, now: DateTime<Utc>) -> Value {
         parts.push(memory);
         parts.join(" · ")
     };
-    let tone = if failed_lately {
+    let tone = if failed > 0 {
         Some("destructive")
-    } else if pressure || guard || late {
+    } else if pressure || guard || late > 0 {
         Some("warning")
     } else {
         None
     };
-    let waiting = active + queued.len();
     let queue = &snap["queue"];
     let head = match (text(&queue["blocked_by"]), text(&queue["blocked_detail"])) {
         ("", _) => String::new(),
@@ -287,7 +297,7 @@ pub fn model(source: Source, now: DateTime<Utc>) -> Value {
         "state": "live",
         "daemon": text(&snap["daemon"]["version"]),
         "line": {"text": line_text, "tone": tone},
-        "badge": if waiting > 0 { json!({"count": waiting, "tone": tone}) } else { Value::Null },
+        "badge": badge(failed, late, pressure || guard),
         "host": {
             "text": gib_pair(total - available, total),
             "ratio": ratio(total - available, total),
@@ -377,6 +387,19 @@ mod tests {
             item["ended_at"] = json!("2026-11-11T07:00:00Z");
         }
         assert_eq!(model(Source::Live(snap), now())["line"]["tone"], "warning");
+    }
+
+    #[test]
+    fn the_badge_counts_what_wants_a_look_not_what_runs() {
+        assert_eq!(badge(2, 1, true), json!({"count": 2, "tone": "destructive"}));
+        assert_eq!(badge(0, 1, true), json!({"count": 1, "tone": "warning"}));
+        assert_eq!(badge(0, 0, true), json!({"count": "!", "tone": "warning"}));
+        assert_eq!(badge(0, 0, false), Value::Null);
+        let mut snap = fixture();
+        snap["recent"] = json!([]);
+        snap["items"].as_array_mut().unwrap().retain(|i| i["state"] != "QUEUED");
+        let m = model(Source::Live(snap), now());
+        assert_eq!((m["badge"].clone(), m["line"]["text"].as_str()), (Value::Null, Some("3 running · 1 held · 17/27 GiB")));
     }
 
     #[test]
