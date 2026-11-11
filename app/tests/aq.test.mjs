@@ -15,7 +15,7 @@ async function fixture() {
   const calls = [], acts = [];
   const context = createContext({ console });
   const imports = {
-    herdr: { run: (...args) => calls.push(args), setShared: (...args) => calls.push(["shared", ...args]), panes: () => [] },
+    herdr: { run: (...args) => calls.push(args), setShared: (...args) => calls.push(["shared", ...args]), panes: () => [], spaces: () => [] },
     "./hub.js": { act: async (...args) => (acts.push(args), { note: "ok" }), openUrl: async () => ({ code: 0 }) },
   };
   const sources = new Map(), modules = new Map();
