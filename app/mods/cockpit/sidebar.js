@@ -23,6 +23,7 @@ const APPS = {
   monitor: { label: "Monitor", icon: "activity", key: "⌘⌥5" },
   routines: { label: "Routines", icon: "clock", key: "⌘⌥6" },
   mail: { label: "Mail", icon: "mail", key: "⌘⌥7" },
+  aq: { label: "aq", icon: "cpu", key: "⌘⌥8" },
 };
 const DEFAULT_SPACES = ["inbox", "terminal", "actions", "to-do", "runbook", "meetings"];
 
@@ -38,6 +39,7 @@ function appBadge(app, v) {
   }
   if (app === "routines") return of(v.tiles?.unread, v.tiles?.failing ? "destructive" : "warning");
   if (app === "mail") return of(v.counts?.needs, "warning");
+  if (app === "aq") return v.badge ? { count: v.badge.count, tone: v.badge.tone ?? "info" } : null;
   if (app === "meetings") {
     const now = Date.now();
     const left = (v.meetings ?? []).filter((m) => m.day === v.today && (m.end ?? 0) > now).length;
@@ -95,8 +97,10 @@ export default class Sidebar {
         await hub.sleep(cx, 5 * 60 * 1000);
       }
     });
-    this.sub = hub.subscribe(cx, { views: ["todo", "inbox", "monitor", "routines", "meetings", "mail"], notify: true }, (m, cx) => {
+    this.sub = hub.subscribe(cx, { views: ["todo", "inbox", "monitor", "routines", "meetings", "mail", "aq"], notify: true }, (m, cx) => {
       if (m.view) this.counts[m.view] = appBadge(m.view, m.value);
+      // aq has no place in the config's spaces: its icon shows wherever the hub finds aq on its machine.
+      if (m.view === "aq") this.aq = m.value?.state && m.value.state !== "absent";
       if (m.notify) this.toast(m.notify, cx);
       cx.notify();
     });
@@ -211,7 +215,8 @@ export default class Sidebar {
         )
         .when(Boolean(count) && rail, (e) => e.child(div().absolute().top(4).right(6).size(7).rounded(4).bg(tone ?? k.ring)));
     };
-    const apps = this.spaces.filter((s) => APPS[s]).map((s) => ({ ...APPS[s], child: APPS[s].child ?? s }));
+    const pinned = this.aq && !this.spaces.includes("aq") ? [...this.spaces, "aq"] : this.spaces;
+    const apps = pinned.filter((s) => APPS[s]).map((s) => ({ ...APPS[s], child: APPS[s].child ?? s }));
     const badge = (child) => this.counts[child] ?? shared(`badge.${child}`) ?? null;
     const tone = (child) => { const t = badge(child)?.tone; return t ? k[t] ?? t : null; };
     const counts = model.value?.counts ?? {};

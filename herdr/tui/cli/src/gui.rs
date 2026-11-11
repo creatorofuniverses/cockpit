@@ -66,6 +66,12 @@ pub fn register() {
     views::register(Def { name: "review", docs: &[], dirs: Vec::new, build: cockpit_show::review::view, act: cockpit_show::review::act });
     views::register(Def { name: "home", docs: &["inbox", "ci"], dirs: crate::home::dirs, build: crate::home::view, act: crate::home::act });
     views::register(Def { name: "queue", docs: &["queue"], dirs: crate::queue::dirs, build: crate::queue::view, act: crate::queue::act });
+    views::register(Def { name: "aq", docs: &[], dirs: cockpit_aq::gui::dirs, build: cockpit_aq::gui::view, act: cockpit_aq::gui::act });
+    views::register(Def { name: "aq-log", docs: &[], dirs: cockpit_aq::gui::dirs, build: cockpit_aq::gui::log_view, act: |_, _| None });
+    cockpit_aq::gui::start(|| {
+        views::touch("aq");
+        views::touch("aq-log");
+    });
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

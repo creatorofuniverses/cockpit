@@ -1,0 +1,344 @@
+---
+source: aq/src/model.rs
+expression: "serde_json::to_string_pretty(&model(Source::Live(fixture()), now())).unwrap()"
+---
+{
+  "badge": {
+    "count": 5,
+    "tone": "destructive"
+  },
+  "counts": {
+    "queued": 2,
+    "recent": 5,
+    "reservations": 1,
+    "running": 3
+  },
+  "daemon": "0.9.0",
+  "day": {
+    "cancelled": 1,
+    "failed": 3,
+    "finished": 31,
+    "oom": 1,
+    "reservations": 2,
+    "run_total": "1h 30m",
+    "succeeded": 27,
+    "text": "27/31 ok",
+    "timeout": 0,
+    "wait_max": "5m",
+    "wait_median": "0s"
+  },
+  "head": "the queue waits on pool memory: needs 6.0 GiB, 3.2 GiB free in the pool",
+  "host": {
+    "guard_active": false,
+    "pressure_closed": false,
+    "ratio": 0.35,
+    "text": "10.8 / 31.1 GiB"
+  },
+  "line": {
+    "text": "3 running · 2 queued · 1 held · 17/27 GiB",
+    "tone": "destructive"
+  },
+  "pool": {
+    "cpus_ratio": 0.56,
+    "cpus_text": "9 / 16 CPU",
+    "ratio": 0.63,
+    "text": "17.0 / 27.0 GiB"
+  },
+  "queued": [
+    {
+      "acts": [
+        "cancel"
+      ],
+      "agent": "claude",
+      "blocked": "pool memory: needs 6.0 GiB, 3.2 GiB free in the pool",
+      "cpus": 4.0,
+      "expected": "in 4m",
+      "id": "5b1e0c44-8f2a-4d3b-9a61-0c7e2f4d9b10",
+      "kind": "task",
+      "late": true,
+      "mem": {
+        "high": false,
+        "ratio": 0.0,
+        "text": "needs 6.0 GiB"
+      },
+      "name": "tests",
+      "path": "/home/maya/src/acme/billing",
+      "phase": "queued",
+      "position": 1,
+      "project": "billing",
+      "session": "5e6f7a8b-9c0d-4e1f-a2b3-c4d5e6f7a8b9",
+      "short": "5b1e0c44",
+      "state": "QUEUED",
+      "waited": "8m",
+      "within": null
+    },
+    {
+      "acts": [
+        "cancel"
+      ],
+      "agent": "codex",
+      "blocked": "its turn",
+      "cpus": 1.0,
+      "expected": null,
+      "id": "e8d7c6b5-a4f3-4e2d-9c1b-0a9f8e7d6c5b",
+      "kind": "task",
+      "late": false,
+      "mem": {
+        "high": false,
+        "ratio": 0.0,
+        "text": "needs 770 MiB"
+      },
+      "name": "lint",
+      "path": "/home/maya/src/acme/web",
+      "phase": "queued",
+      "position": 2,
+      "project": "web",
+      "session": "thread-sam-7",
+      "short": "e8d7c6b5",
+      "state": "QUEUED",
+      "waited": "1m",
+      "within": null
+    }
+  ],
+  "recent": [
+    {
+      "acts": [
+        "logs",
+        "result"
+      ],
+      "agent": "claude",
+      "cpus": 4.0,
+      "diagnostic": "",
+      "ended": "15m ago",
+      "exit_code": 0,
+      "id": "aa11bb22-cc33-4d44-8e55-ff6677889900",
+      "kind": "task",
+      "name": "go-test",
+      "outcome": "ok",
+      "path": "/home/maya/src/acme/api",
+      "peak": "3.1 / 6.0 GiB",
+      "phase": "done",
+      "project": "api",
+      "session": "0b7f3e9a-1c2d-4e5f-8a9b-0c1d2e3f4a5b",
+      "short": "aa11bb22",
+      "state": "SUCCEEDED",
+      "tone": "success",
+      "took": "6m",
+      "within": null,
+      "words": "Succeeded"
+    },
+    {
+      "acts": [
+        "logs",
+        "result"
+      ],
+      "agent": "claude",
+      "cpus": 4.0,
+      "diagnostic": "memory limit 4.0 GiB reached",
+      "ended": "25m ago",
+      "exit_code": 137,
+      "id": "bb22cc33-dd44-4e55-9f66-001122334455",
+      "kind": "task",
+      "name": "tests",
+      "outcome": "oom",
+      "path": "/home/maya/src/acme/billing",
+      "peak": "4.0 / 4.0 GiB",
+      "phase": "done",
+      "project": "billing",
+      "session": "5e6f7a8b-9c0d-4e1f-a2b3-c4d5e6f7a8b9",
+      "short": "bb22cc33",
+      "state": "FAILED",
+      "tone": "destructive",
+      "took": "6m",
+      "within": null,
+      "words": "OOM"
+    },
+    {
+      "acts": [
+        "logs",
+        "result"
+      ],
+      "agent": "claude",
+      "cpus": 4.0,
+      "diagnostic": "stderr tail: --- FAIL: TestCheckout (3.20s)",
+      "ended": "28m ago",
+      "exit_code": 1,
+      "id": "cc33dd44-ee55-4f66-8a77-112233445566",
+      "kind": "task",
+      "name": "e2e",
+      "outcome": "failed",
+      "path": "/home/maya/src/acme/api",
+      "peak": "1.9 / 4.0 GiB",
+      "phase": "done",
+      "project": "api",
+      "session": "0b7f3e9a-1c2d-4e5f-8a9b-0c1d2e3f4a5b",
+      "short": "cc33dd44",
+      "state": "FAILED",
+      "tone": "destructive",
+      "took": "6m",
+      "within": "7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d",
+      "words": "Failed · exit 1"
+    },
+    {
+      "acts": [
+        "logs",
+        "result"
+      ],
+      "agent": "codex",
+      "cpus": 1.0,
+      "diagnostic": "",
+      "ended": "1h 20m ago",
+      "exit_code": null,
+      "id": "dd44ee55-ff66-4a77-9b88-223344556677",
+      "kind": "task",
+      "name": "build-web",
+      "outcome": "cancelled",
+      "path": "/home/maya/src/acme/web",
+      "peak": "1.2 / 4.0 GiB",
+      "phase": "done",
+      "project": "web",
+      "session": "thread-sam-7",
+      "short": "dd44ee55",
+      "state": "CANCELLED",
+      "tone": "muted",
+      "took": "4m",
+      "within": null,
+      "words": "Cancelled"
+    },
+    {
+      "acts": [
+        "result"
+      ],
+      "agent": "claude",
+      "cpus": 0.0,
+      "diagnostic": "",
+      "ended": "1h 35m ago",
+      "exit_code": null,
+      "id": "ee55ff66-0077-4b88-8c99-334455667788",
+      "kind": "reservation",
+      "name": "pg-stand",
+      "outcome": "released",
+      "path": "/home/maya/src/acme/billing",
+      "peak": "1.3 / 2.0 GiB",
+      "phase": "done",
+      "project": "billing",
+      "session": "5e6f7a8b-9c0d-4e1f-a2b3-c4d5e6f7a8b9",
+      "short": "ee55ff66",
+      "state": "RELEASED",
+      "tone": "muted",
+      "took": "54m",
+      "within": null,
+      "words": "Released"
+    }
+  ],
+  "reservations": [
+    {
+      "acts": [
+        "extend",
+        "release"
+      ],
+      "agent": "claude",
+      "budget": "tasks 4.0 GiB · 4 CPU",
+      "cpus": 0.0,
+      "docker": "acme-api-e2e",
+      "expiring": false,
+      "id": "7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d",
+      "kind": "reservation",
+      "mem": {
+        "high": false,
+        "ratio": 0.7,
+        "text": "2.1 / 3.0 GiB"
+      },
+      "name": "e2e-stand",
+      "path": "/home/maya/src/acme/api",
+      "phase": "held",
+      "project": "api",
+      "session": "0b7f3e9a-1c2d-4e5f-8a9b-0c1d2e3f4a5b",
+      "short": "7a6b5c4d",
+      "state": "GRANTED",
+      "tasks": [
+        {
+          "acts": [
+            "logs",
+            "cancel"
+          ],
+          "agent": "claude",
+          "cpus": 4.0,
+          "id": "3d2c1b0a-9f8e-4d7c-b6a5-4f3e2d1c0b9a",
+          "kind": "task",
+          "mem": {
+            "high": false,
+            "ratio": 0.45,
+            "text": "1.8 / 4.0 GiB"
+          },
+          "name": "e2e",
+          "path": "/home/maya/src/acme/api",
+          "phase": "running",
+          "project": "api",
+          "session": "0b7f3e9a-1c2d-4e5f-8a9b-0c1d2e3f4a5b",
+          "short": "3d2c1b0a",
+          "state": "RUNNING",
+          "time": "10m",
+          "timeout": "30m",
+          "within": "7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d"
+        }
+      ],
+      "time": "37m",
+      "ttl": "22m left",
+      "within": null
+    }
+  ],
+  "running": [
+    {
+      "acts": [
+        "logs",
+        "cancel"
+      ],
+      "agent": "claude",
+      "cpus": 4.0,
+      "id": "9c4a7e21-3b5d-4f60-8a12-7d9e0b1c2f34",
+      "kind": "task",
+      "mem": {
+        "high": false,
+        "ratio": 0.4,
+        "text": "2.4 / 6.0 GiB"
+      },
+      "name": "go-test",
+      "path": "/home/maya/src/acme/api",
+      "phase": "running",
+      "project": "api",
+      "session": "0b7f3e9a-1c2d-4e5f-8a9b-0c1d2e3f4a5b",
+      "short": "9c4a7e21",
+      "state": "RUNNING",
+      "time": "13m",
+      "timeout": "30m",
+      "within": null
+    },
+    {
+      "acts": [
+        "logs",
+        "cancel"
+      ],
+      "agent": "codex",
+      "cpus": 1.0,
+      "id": "1f2e3d4c-5b6a-4798-8a7b-6c5d4e3f2a1b",
+      "kind": "task",
+      "mem": {
+        "high": true,
+        "ratio": 0.9,
+        "text": "3.6 / 4.0 GiB"
+      },
+      "name": "build-web",
+      "path": "/home/maya/src/acme/web",
+      "phase": "running",
+      "project": "web",
+      "session": "thread-sam-7",
+      "short": "1f2e3d4c",
+      "state": "RUNNING",
+      "time": "1m",
+      "timeout": "15m",
+      "within": null
+    }
+  ],
+  "state": "live"
+}

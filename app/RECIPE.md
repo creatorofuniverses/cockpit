@@ -21,7 +21,8 @@ dark theme); type is the theme's UI font at 13px, monospace for branches, refs a
   - **Cockpit sidebar**, the rest: a "Search or run…" field with its `⌘⇧P` hint; with Claude Code, two quota bars, 5h
     and 7d, each with its percent and a tick where the even pace would be (fill `#a6bd91`, track `#2c2e31`); a row of
     app icons, Home first, then the apps among the cockpit config's `spaces` in their order (Inbox, To-do, Runbook,
-    Meetings, Monitor, Routines, Mail; without a config Home, Inbox, To-do, Runbook, Meetings), each with a count badge in a
+    Meetings, Monitor, Routines, Mail; without a config Home, Inbox, To-do, Runbook, Meetings; then aq wherever the hub finds
+    it), each with a count badge in a
     corner, the shown one on a raised tile; the **NEEDS YOU** band, on every view but Home (Home answers them itself):
     one card per agent waiting on you, three at most (a red-tinted card: its task, how long it has waited, its question
     and its choices as numbered rows or checkboxes, a Submit button, a reply arrow and a snooze alarm), then "N more
@@ -49,9 +50,9 @@ dark theme); type is the theme's UI font at 13px, monospace for branches, refs a
   - **Work**: the active tab's panes (each with a 30px cockpit header: agent, folder, branch, status), or the focused
     agent alone with a 34px head. A hidden right **panel**, 420px (280–900): the agent's charts and diagrams (Show),
     its diff with line comments (Review), its runbook, Herdr's Files and Changes, and a 44px activity bar of their icons.
-  - **Inbox, Runbook, To-do, Meetings, Monitor, Routines, Mail**: one full card each (PRs, reviews and tickets by
+  - **Inbox, Runbook, To-do, Meetings, Monitor, Routines, Mail, aq**: one full card each (PRs, reviews and tickets by
     feature; deploy steps with their commands; to-dos; the week's meetings; releases judged on errors and latency;
-    scheduled agent runs and their output; mail).
+    scheduled agent runs and their output; mail; the heavy commands agents queued through aq, with the pool's memory).
   - **Mail**: the inbox as a mail client lists it, the latest 15 **Unread** above the latest 15 **Read** (dimmed),
     newest first; each row 52px: an 8px unread dot in `warning`, the sender (160px, in its person color while unread),
     the subject, the snippet under it, the age at the right; hovered or selected, an **Open** button and archive / mark
@@ -85,7 +86,7 @@ dark theme); type is the theme's UI font at 13px, monospace for branches, refs a
   the board, `m` merge, `a` archive (Undo on the toast), `o` PR, `r` recap, `s` snooze, `q` queue, `n` new agent;
   right-click for the rest. With no card picked, keys act on the NEXT MOVE agent.
 - **Window keys** (`keys.json`, section `layout:cockpit`): `⌘⇧P` cockpit's palette (Herdr's commands plus PRs, tickets,
-  runbooks, meetings, past sessions); `⌘⌥0` Home ↔ work; `⌘⌥1…7` Inbox, Runbook, To-do, Meetings, Monitor, Routines, Mail;
+  runbooks, meetings, past sessions); `⌘⌥0` Home ↔ work; `⌘⌥1…8` Inbox, Runbook, To-do, Meetings, Monitor, Routines, Mail, aq;
   `⌘⌥A` the focused agent alone; `⌘⌥B` the right panel, `⌃⌘1…5` its Show / Review / Runbook / Files / Changes;
   `⌘J` the next agent waiting, `⌘⇧J` the next blocked, `⌘⇧U` the next done; `⌘⌥Q` the queue; `⌘⌥R` resume agents
   lost to a restart; `⌘R` recap of every agent; `⌘G` the focused agent's PR; `⌘L` its ticket.
@@ -118,11 +119,11 @@ dark theme); type is the theme's UI font at 13px, monospace for branches, refs a
   a `view` stack of `main` = `{tab: "active"}` with pane headers `{app: "pane"}` 30px, and `agent` = `agent-head` over
   the focused agent; then the hidden `panel` row, 420px: a `panel-body` stack of `show`, `review`, `runbook-panel`
   (`runbook {scope: "focused"}`), Herdr's `files` and `changes`, and `activity` 44px), then `inbox`, `runbook`,
-  `todo`, `meetings`, `monitor`, `routines`, `mail` blocks. `floating`: `queue` (`{app: "queue"}`, edge right, align center,
+  `todo`, `meetings`, `monitor`, `routines`, `mail`, `aq` blocks. `floating`: `queue` (`{app: "queue"}`, edge right, align center,
   peek 44).
 - **One mod** `mods/cockpit/` (`mod.json`: `place: none`, focusable): every block is the same mod with `props.app`
   (`sidebar`, `home`, `bell`, `status`, `pane`, `agent-head`, `activity`, `queue`, `show`, `review`, `runbook`, `inbox`,
-  `todo`, `meetings`, `monitor`, `routines`, `mail`), and so is every overlay it opens (`palette`, `menu`, `recap`, `code`,
+  `todo`, `meetings`, `monitor`, `routines`, `mail`, `aq`), and so is every overlay it opens (`palette`, `menu`, `recap`, `code`,
   `reader`, `kit`, `update`, `monitor-window`); `main.js` maps the name to a view class. `ui.js` is a shadcn-style kit on
   `theme()`; icons are lucide SVGs in `icons/`, the mark is `cockpit.svg`. Shipped mods used: `workspace-chrome`,
   `tabs`, `files`, `changes`, `menu` (a space's right-click) and `prompt` (the palette's Duplicate mod).
@@ -181,6 +182,6 @@ dark theme); type is the theme's UI font at 13px, monospace for branches, refs a
   agent running in a Herdr terminal shows in the sidebar's Agents with its status.
 - With cockpit installed and an agent waiting on a question, its card shows in NEEDS YOU (on any view but Home) and on
   Home's NEXT MOVE, the bell counts it, and pressing `1` on Home answers it (the agent moves on, the card goes).
-- `⌘⌥1…7` switch the center to each app, `⌘⌥0` back to Home; `⌘⇧P` opens the palette and finds a PR by a word of its
+- `⌘⌥1…8` switch the center to each app, `⌘⌥0` back to Home; `⌘⇧P` opens the palette and finds a PR by a word of its
   title.
 - `⌘⌥B` opens the right panel beside the active tab; `⌃⌘2` shows the focused agent's diff.

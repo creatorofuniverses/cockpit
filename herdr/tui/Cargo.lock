@@ -452,11 +452,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "cockpit-aq"
+version = "0.40.2"
+dependencies = [
+ "chrono",
+ "cockpit-core",
+ "insta",
+ "libc",
+ "serde_json",
+]
+
+[[package]]
 name = "cockpit-cli"
 version = "0.40.2"
 dependencies = [
  "chrono",
  "cockpit-agents",
+ "cockpit-aq",
  "cockpit-connectors",
  "cockpit-core",
  "cockpit-hub",

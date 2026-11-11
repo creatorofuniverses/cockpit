@@ -35,6 +35,7 @@ const APPS = [
   ["monitor", "Monitor", "activity"],
   ["routines", "Routines", "clock"],
   ["mail", "Mail", "mail"],
+  ["aq", "aq", "cpu"],
 ];
 
 // cockpit's window keys (keys.json's layout:cockpit), by name: [command, title, icon, keywords].

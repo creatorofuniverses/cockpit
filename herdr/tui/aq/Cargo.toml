@@ -1,0 +1,18 @@
+[package]
+name = "cockpit-aq"
+description = "The aq space: the heavy commands agents queued through aq, what runs, waits and was held, with the actions aq offers."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+cockpit-core.workspace = true
+chrono.workspace = true
+libc = "0.2"
+serde_json.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
