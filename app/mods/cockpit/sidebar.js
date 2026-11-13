@@ -27,6 +27,17 @@ const APPS = {
 };
 const DEFAULT_SPACES = ["inbox", "terminal", "actions", "to-do", "runbook", "meetings"];
 
+/** The fields of each app's view that appBadge reads (and aq's state): the hub sends these alone, when they move. */
+const BADGE_FIELDS = {
+  todo: ["open"],
+  inbox: ["counts"],
+  monitor: ["tiles"],
+  routines: ["tiles"],
+  meetings: ["meetings", "today", "banner"],
+  mail: ["counts"],
+  aq: ["badge", "state"],
+};
+
 /** An app's bubble from its view: what waits on you there, {count, tone} or null. */
 function appBadge(app, v) {
   if (!v) return null;
@@ -100,7 +111,8 @@ export default class Sidebar {
         await hub.sleep(cx, 5 * 60 * 1000);
       }
     });
-    this.sub = hub.subscribe(cx, { views: ["todo", "inbox", "monitor", "routines", "meetings", "mail", "aq"], notify: true }, (m, cx) => {
+    const views = Object.entries(BADGE_FIELDS).map(([name, pick]) => ({ name, pick }));
+    this.sub = hub.subscribe(cx, { views, notify: true }, (m, cx) => {
       if (m.view) this.counts[m.view] = appBadge(m.view, m.value);
       // aq has no place in the config's spaces: its icon shows wherever the hub finds aq on its machine.
       if (m.view === "aq") this.aq = m.value?.state && m.value.state !== "absent";
