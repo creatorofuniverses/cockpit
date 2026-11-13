@@ -11,17 +11,23 @@ const close = (socket) => {
   } catch {}
 };
 
+/**
+ * How often a subscription promises the hub a line, in seconds. A copy of the mod that Herdr reloads away keeps its
+ * sockets open but runs no more: the hub ends a subscription that breaks the promise three times over.
+ */
+const KEEPALIVE_SECS = 30;
+
 /** Waits `ms` on the context's timer (mods have no setTimeout). */
 export const sleep = (cx, ms) => new Promise((resolve) => cx.timer.after(ms, () => resolve()));
 
 const NOT_INSTALLED = "cockpit is not installed in this Herdr home";
 const READ_ONLY = "the remote cockpit client is read-only; this action needs a local cockpit installation";
 const REMOTE_READS = new Set(["ping", "view", "search", "fetch", "events", "history", "shown"]);
-const APPS = new Set(["inbox", "todo", "runbook", "meetings", "mail", "monitor", "routines", "show"]);
+const APPS = new Set(["inbox", "todo", "runbook", "meetings", "mail", "monitor", "routines", "aq", "show"]);
 /** The review panel's actions a remote desk runs on the runner with `cockpit hub act review`, the hub's TCP gate untouched. */
 const RUNNER_REVIEW = new Set(["send", "walkthrough", "stop_walkthrough"]);
 /** The app behind a pinned space's name, as `cockpit focus space:<name>` gives it. */
-const SPACES = { inbox: "inbox", runbook: "runbook", "to-do": "todo", todo: "todo", meetings: "meetings", monitor: "monitor", routines: "routines", mail: "mail" };
+const SPACES = { inbox: "inbox", runbook: "runbook", "to-do": "todo", todo: "todo", meetings: "meetings", monitor: "monitor", routines: "routines", mail: "mail", aq: "aq" };
 
 /** Brings an app into view on this desktop, without a row to select. */
 function localShow(app) {
@@ -286,7 +292,8 @@ export function subscribe(cx, { views = [], docs = [], notify = false, focus = n
         const { socket, token, lines, remote } = await connect(state);
         state.socket = socket;
         if (state.stopped) break;
-        await socket.write(JSON.stringify({ op: "subscribe", token, views, docs, notify }) + "\n");
+        await socket.write(JSON.stringify({ op: "subscribe", token, views, docs, notify, keepalive: KEEPALIVE_SECS }) + "\n");
+        let wrote = Date.now();
         onState("live", cx);
         wait = 250;
         for (;;) {
@@ -306,6 +313,11 @@ export function subscribe(cx, { views = [], docs = [], notify = false, focus = n
             deadline?.cancel();
           }
           if (line === null) break;
+          // The hub writes at least every half minute, so answering a line keeps the promise of one every KEEPALIVE_SECS.
+          if (Date.now() - wrote >= (KEEPALIVE_SECS - 5) * 1000) {
+            await socket.write("\n");
+            wrote = Date.now();
+          }
           if (!line.trim()) continue;
           const message = JSON.parse(line);
           if (message.error) throw new Error(message.error);

@@ -49,6 +49,7 @@ const OVERVIEW = [
       return { text: t.next ? `next ${t.next}` : "none scheduled" };
     },
   },
+  { view: "aq", space: "aq", label: "aq", icon: "cpu", line: (v) => v.line ?? null },
 ];
 
 const COLUMNS = [
@@ -729,7 +730,7 @@ export default class Home {
     const k = tokens();
     // Meetings have their own card above.
     // Mail shows wherever it is set up, pinned or not.
-    const items = OVERVIEW.filter((o) => o.view !== "meetings" && ((this.pinned ?? DEFAULT_PINNED).includes(o.space) || (o.view === "mail" && this.apps.mail?.enabled)))
+    const items = OVERVIEW.filter((o) => o.view !== "meetings" && ((this.pinned ?? DEFAULT_PINNED).includes(o.space) || (o.view === "mail" && this.apps.mail?.enabled) || o.view === "aq"))
       .map((o) => ({ ...o, line: this.apps[o.view] ? o.line(this.apps[o.view]) : null }))
       .filter((o) => o.line);
     return this.side(

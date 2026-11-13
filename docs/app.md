@@ -83,7 +83,9 @@ In the desktop's Herdr home, write `cockpit.json` using the runner's paths and i
 ```
 
 The mod reads the port and token through Herdr's remote file API, authenticates before requesting data, and follows
-updates over TCP. Subscriptions reconnect when the hub restarts or sends nothing for 65 seconds. Links and item
+updates over TCP. Subscriptions reconnect when the hub restarts or sends nothing for 65 seconds, and each answers the
+hub at least every 30 seconds: the hub resets one that falls quiet for 90 seconds or stops reading, such as the sockets a
+reloaded copy of the mod leaves open in Herdr. Links and item
 navigation open on the desktop. Notifications appear as in-app toasts. Go, Peek and Open beside reach a runner agent
 through its machine-scoped address (`runner/t7`), the terminal Herdr shows for that machine; they write nothing to the
 runner's hub. The machine must connect to the hc session the runner's hub reads (its default session unless the hub
@@ -109,7 +111,7 @@ Desktop checks: `node --experimental-vm-modules --test app/tests/*.test.mjs`.
 ## Window-wide plumbing (the sidebar copy owns it)
 
 - Keys (`app/keys.json`, section `layout:cockpit`): `cmd-shift-p` → `cockpit.palette` (cockpit's palette, a superset of
-  Herdr's), `cmd-alt-1..7` → `cockpit.go:<inbox|runbook|todo|meetings|monitor|routines|mail>`. A `cockpit.<command>`
+  Herdr's), `cmd-alt-1..8` → `cockpit.go:<inbox|runbook|todo|meetings|monitor|routines|mail|aq>`. A `cockpit.<command>`
   reaches every shown copy's `command()`; prefix your own with your view's name (`todo:delete:<key>`).
 - `show(child)` from `sidebar.js` switches the `center` stack and gives that view the keyboard (`show:<app>`).
 - Notifications (`notify.js`): everything goes through `cockpit_core::notify::post` (or `cockpit notify`). With the app
@@ -387,6 +389,44 @@ through the hub's mail server at once (the mapping's `get` verb, `thread`/`html`
 request a Claude Code session carries out (`plugin/hooks/mail.ts`); `mail_reply` starts an agent in the actions space
 that drafts a reply and sends nothing; `mail_archive`, `mail_read`, `mail_open`; `request_refresh`. A notification about a
 new message leads to `mail:<id>`: the mail space, that message open.
+
+## Views `aq` and `aq-log` (the aq space, app only)
+
+aq is a local queue for the heavy commands agents run (test suites, builds, docker stands): it starts each when memory
+is free and keeps a dashboard snapshot, `dashboard.json`, in its runtime folder (`AQ_RUNTIME_DIR`, else
+`$XDG_RUNTIME_DIR/agent-queue`), rewritten whenever the queue changes and at least every 30 seconds. `cockpit_aq::gui`
+reads that file, else `aq dashboard --json`, and rebuilds when the folder changes and every 20 seconds, so a snapshot a
+dead daemon left behind (older than 60 seconds) reads as down. The space has no TUI half and no place in the config's
+`spaces`: its sidebar icon and Home line show wherever the hub finds aq on its machine.
+
+```jsonc
+{
+  "state": "live" | "down" | "absent", "error": "…",          // down: why; absent: no aq, the space and line hide
+  "line": {"text": "3 running · 2 queued · 1 held · 17/27 GiB", "tone": "destructive" | "warning" | null},
+  "badge": {"count": 2, "tone": "destructive"},              // failed in the last hour, else waiting long, else "!"; null when all is well
+  "pool": {"text": "17.0 / 27.0 GiB", "ratio": 0.63, "cpus_text": "9 / 16 CPU", "cpus_ratio": 0.56},
+  "host": {"text": "10.8 / 31.1 GiB", "ratio": 0.35, "pressure_closed": false, "guard_cutting": false,
+           "guard_ceiling": "22.5 GiB"},                       // guard_ceiling: null before the guard first writes one
+  "head": "the queue waits on memory: …", "counts": {"running": 3, "queued": 2, "reservations": 1, "recent": 5},
+  "running": [Item], "queued": [Item], "reservations": [Item], "recent": [Item],
+  "day": {"text": "27/31 ok", "failed": 3, "oom": 1, "wait_median": "0s", "run_total": "1h 30m", …}
+}
+// Item: {id, short, name, kind, state, phase: "running" | "queued" | "held" | "done", project, path, agent, session,
+//        within, cpus, mem: {text, ratio, high}, acts: ["logs" | "result" | "cancel" | "extend" | "release"], …}
+// running: time, timeout · queued: position, blocked, expected, waited, late · held: ttl, expiring, budget, docker,
+// tasks: [Item] · done: outcome, words, tone, exit_code, diagnostic, took, ended, peak
+```
+
+The line turns red when a task failed, ran out of memory or timed out in the last hour, and yellow while aq closed
+admission on memory pressure, its host guard cuts aq's slice below what aq promised running work, or an item has waited
+over five minutes. A guard ceiling alone is no warning: the pool tile shows it as a number. Memory reads in tenths of a
+GiB (MiB below one) and times to the minute, so the model moves only when something you would see does.
+
+`aq-log {id, stream: "stdout" | "stderr" | "result", tail}` is one item's output (`aq logs`) or how it ended
+(`aq result`), as `{id, stream, text, error}`. Actions (`act("aq", action, [id, ttl?])`): `cancel`, `extend` (30m by
+default) and `release`, run as the aq commands of those names; ids must be aq's hex-and-dash ids. A remote desk reads the
+runner's queue and logs; the buttons that change it show only on the machine aq runs on. An item goes to its agent by
+its `session`, matched against the `agents` view's rows.
 
 ## Views `show` and `review` (the right panel and the show tool's panes)
 
