@@ -237,20 +237,22 @@ pub fn model(source: Source, now: DateTime<Utc>) -> Value {
         let why = format!("the aq daemon stopped updating its dashboard {} ago", span(age));
         return json!({"state": "down", "error": why, "line": {"text": "aq is down", "tone": "warning"}, "badge": null});
     }
+    // The rows' times count from the start of the minute, so they all turn at once and the view moves once a minute.
+    let minute = DateTime::from_timestamp(now.timestamp() - now.timestamp().rem_euclid(60), 0).unwrap_or(now);
     let items = snap["items"].as_array().cloned().unwrap_or_default();
-    let in_res = |res: &str| -> Vec<Value> { items.iter().filter(|i| text(&i["within"]) == res).map(|i| task(i, now)).collect() };
+    let in_res = |res: &str| -> Vec<Value> { items.iter().filter(|i| text(&i["within"]) == res).map(|i| task(i, minute)).collect() };
     let top = |i: &&Value| i["within"].as_str().is_none_or(str::is_empty);
     let running: Vec<Value> =
-        items.iter().filter(top).filter(|i| text(&i["kind"]) != "reservation" && ACTIVE.contains(&text(&i["state"]))).map(|i| task(i, now)).collect();
-    let mut queued: Vec<Value> = items.iter().filter(|i| text(&i["state"]) == "QUEUED").map(|i| task(i, now)).collect();
+        items.iter().filter(top).filter(|i| text(&i["kind"]) != "reservation" && ACTIVE.contains(&text(&i["state"]))).map(|i| task(i, minute)).collect();
+    let mut queued: Vec<Value> = items.iter().filter(|i| text(&i["state"]) == "QUEUED").map(|i| task(i, minute)).collect();
     queued.sort_by_key(|q| q["position"].as_i64().unwrap_or(i64::MAX));
     let reservations: Vec<Value> = items
         .iter()
         .filter(|i| text(&i["kind"]) == "reservation" && HELD.contains(&text(&i["state"])))
-        .map(|i| reservation(i, in_res(text(&i["id"])), now))
+        .map(|i| reservation(i, in_res(text(&i["id"])), minute))
         .collect();
     let recent_items = snap["recent"].as_array().cloned().unwrap_or_default();
-    let recent: Vec<Value> = recent_items.iter().map(|i| task(i, now)).collect();
+    let recent: Vec<Value> = recent_items.iter().map(|i| task(i, minute)).collect();
 
     let host = &snap["host"];
     let pool = &snap["pool"];
@@ -365,6 +367,19 @@ mod tests {
         assert_eq!(model(Source::Absent, now())["line"], Value::Null);
         let down = model(Source::Down("not running".into()), now());
         assert_eq!((down["state"].as_str(), down["line"]["tone"].as_str()), (Some("down"), Some("warning")));
+    }
+
+    #[test]
+    fn every_row_s_time_moves_at_the_same_minute() {
+        let mut snap = fixture();
+        snap["at"] = json!("2026-11-11T09:30:00Z");
+        snap["recent"][0]["ended_at"] = json!("2026-11-11T09:25:20Z");
+        let rows = |secs: i64| {
+            let m = model(Source::Live(snap.clone()), now() + chrono::Duration::seconds(secs));
+            [m["running"].clone(), m["queued"].clone(), m["reservations"].clone(), m["recent"].clone()]
+        };
+        assert_eq!(rows(10), rows(40), "no row moves within the minute");
+        assert_eq!(rows(40)[3][0]["ended"], "4m ago");
     }
 
     #[test]
