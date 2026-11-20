@@ -1,12 +1,14 @@
 // The side panel's activity bar: one icon per panel (Documents, Review, Runbook, Files, Changes, the Chromium browser
 // when it is the side browser, and in the reading layout the file it opened there and the terminal-browser beside the agent), the shown one marked by an accent edge, each with the badge its view publishes as shared
-// `badge.<name>` = {count, tone}; a click switches the panel, the last button closes it.
+// `badge.<name>` = {count, tone}. It stays on the edge while the panel is closed: a click opens the panel on that
+// item, or closes it on the one it shows, and the last button opens or closes it.
 
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { run, layout, shared, setShared, panes, focused } from "herdr";
+import { layout, shared, setShared, panes, focused } from "herdr";
 import { tokens, RADIUS, Icon, CornerCount } from "./ui.js";
-import { findNode, PANELS, closePanel } from "./status.js";
+import { findNode, PANELS, togglePanel } from "./status.js";
+import { panelOpen } from "./commands.js";
 import { CODE_PANEL } from "./code.js";
 import { BROWSER, browserIn } from "./browser.js";
 import { WEB } from "./web.js";
@@ -48,7 +50,8 @@ export default class Activity {
 
   render() {
     const k = tokens();
-    const active = findNode(layout(), "panel-body")?.active;
+    const open = panelOpen(layout());
+    const active = open ? findNode(layout(), "panel-body")?.active : null;
     const button = (item) => {
       const child = PANELS[item.name] ?? item.name;
       const on = active === child;
@@ -65,7 +68,7 @@ export default class Activity {
         .text_color(on ? k.foreground : k.mutedFg)
         .hover((s) => s.text_color(k.foreground))
         .tooltip(item.key ? `${item.label}  ${item.key}` : item.label)
-        .on_click(() => run("layout.select", { stack: "panel-body", child }))
+        .on_click(() => togglePanel(item.name))
         .when(on, (e) => e.child(div().absolute().left(0).top(10).bottom(10).w(2).rounded(1).bg(k.ring)))
         .child(h_flex().size(30).items_center().justify_center().rounded(RADIUS.md).when(on, (e) => e.bg(k.selected)).child(Icon(item.icon, { size: 17 })))
         .when(Boolean(badge?.count), (e) => e.child(CornerCount(badge.count, { tone, top: 4, right: 4 })));
@@ -75,9 +78,6 @@ export default class Activity {
       .size_full()
       .py(6)
       .gap(2)
-      .border_l_1()
-      .border_color(k.border)
-      .bg(k.chrome)
       .children(ITEMS.filter((i) => present(i, layout())).map(button))
       .child(div().flex_1())
       .child(
@@ -90,8 +90,8 @@ export default class Activity {
           .cursor_pointer()
           .text_color(k.mutedFg)
           .hover((s) => s.text_color(k.foreground))
-          .tooltip("Close the panel  ⌘⌥B")
-          .on_click(() => closePanel())
+          .tooltip(open ? "Close the panel  ⌘⌥B" : "Open the panel  ⌘⌥B")
+          .on_click(() => togglePanel(null))
           .child(Icon("panel-right", { size: 16 })),
       );
   }

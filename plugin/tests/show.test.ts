@@ -120,10 +120,10 @@ test('show without a window says it wrote the view',async()=>{
 
 const appHere = {pane:'app:t14',tab:'tab1',space:'s1',frontend:'app' as const,terminal:'t14',paneId:'p14'}
 const quotaSpec = {title:'Quota',blocks:[{type:'markdown',text:'ENG-412'}],at:1,session:'acme-session'}
-test('a new view opens Documents beside the session in the app',async()=>{
+test('a new view tells the window instead of taking the person to the session',async()=>{
  const f=presentation();const answer=await present(f.$,'new-quota',quotaSpec,appHere)
- expect('result' in answer && answer.result).toBe('Opened new-quota in Documents beside this session.')
- expect(f.calls.filter(a=>a.includes('do')).map(a=>a[a.indexOf('do')+1])).toEqual(['pane.focus','cockpit.panel-open:show:new-quota'])
+ expect('result' in answer && answer.result).toBe('Put new-quota in Documents beside this session.')
+ expect(f.calls.filter(a=>a.includes('do')).map(a=>a[a.indexOf('do')+1])).toEqual(['cockpit.doc-shown:t14:new-quota|Quota'])
 })
 test('an update only rewrites the view',async()=>{
  const f=presentation();await present(f.$,'existing-quota',quotaSpec,appHere);const count=f.calls.filter(a=>a.includes('do')).length
@@ -138,11 +138,11 @@ test('a browser view with no browser lands in Documents',async()=>{
  const f=presentation();const answer=await present(f.$,'browser-quota',{...quotaSpec,placement:'browser'},appHere)
  expect('result' in answer && answer.result).toBe('No browser beside this session: browser-quota is in Documents instead.')
  expect(JSON.parse(f.files.get(`${DIR}/browser-quota.json`)!).placement).toBe(undefined)
- expect(f.calls.some(a=>a.includes('cockpit.panel-open:show:browser-quota'))).toBe(true)
+ expect(f.calls.some(a=>a.includes('cockpit.doc-shown:t14:browser-quota|Quota'))).toBe(true)
 })
-test('a blueprint opens Documents too',async()=>{
+test('a blueprint goes to Documents too',async()=>{
  const f=presentation();await present(f.$,'blueprint-acme',{...quotaSpec,blocks:[{type:'blueprint',text:'flowchart TD\n a --> b'}]},appHere)
- expect(f.calls.some(a=>a.includes('cockpit.panel-open:show:blueprint-acme'))).toBe(true)
+ expect(f.calls.some(a=>a.includes('cockpit.doc-shown:t14:blueprint-acme|Quota'))).toBe(true)
 })
 test('the herdr TUI still splits a pane',async()=>{
  const f=presentation();await present(f.$,'tui-quota',quotaSpec,{pane:'w1:p1',tab:'t1',space:'w1',frontend:'tui'})

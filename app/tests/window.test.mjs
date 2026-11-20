@@ -41,6 +41,12 @@ test("unverified terminal creation is refused rather than running on the desktop
     assert.equal(f.calls.filter(c=>c[0]==="do").length,0);
   }
 });
+test("cockpit.doc-shown names the runner's terminal as the desktop does, and only the runner's",async()=>{
+  const f=fixture(); assert.deepEqual(await runWindowCommand(command("cockpit.doc-shown:t3:quota|Quota: ENG-412"),f.options),{value:{}});
+  assert.deepEqual(f.runs,["cockpit.doc-shown:runner/t3:quota|Quota: ENG-412"]);
+  const g=fixture(); assert.ok((await runWindowCommand(command("cockpit.doc-shown:t8:quota|Quota"),g.options)).error);
+  assert.deepEqual(g.runs,[]);
+});
 test("cockpit.panel-open:show:quota runs in the window",async()=>{
   const f=fixture(); assert.deepEqual(await runWindowCommand(command("cockpit.panel-open:show:quota"),f.options),{value:{}});
   assert.deepEqual(f.runs,["cockpit.panel-open:show:quota"]);

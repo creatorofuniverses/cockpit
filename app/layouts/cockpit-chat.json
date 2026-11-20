@@ -254,22 +254,30 @@
                           }
                         }
                       ]
-                    },
-                    {
-                      "id": "activity",
-                      "type": "block",
-                      "size": {
-                        "px": 44
-                      },
-                      "content": {
-                        "mod": "cockpit",
-                        "props": {
-                          "app": "activity",
-                          "stack": "panel-body"
-                        }
-                      }
                     }
                   ]
+                },
+                {
+                  "id": "activity",
+                  "type": "block",
+                  "size": {
+                    "px": 44
+                  },
+                  "radius": 10,
+                  "border": {
+                    "width": 1,
+                    "color": "border"
+                  },
+                  "background": "chrome",
+                  "resizable": false,
+                  "shadow": "sm",
+                  "content": {
+                    "mod": "cockpit",
+                    "props": {
+                      "app": "activity",
+                      "stack": "panel-body"
+                    }
+                  }
                 }
               ],
               "padding": 0
@@ -389,18 +397,6 @@
         }
       },
       "edge": "left",
-      "align": "center",
-      "peek": 10
-    },
-    {
-      "id": "panel-peek",
-      "content": {
-        "mod": "cockpit",
-        "props": {
-          "app": "panel-peek"
-        }
-      },
-      "edge": "right",
       "align": "center",
       "peek": 10
     }

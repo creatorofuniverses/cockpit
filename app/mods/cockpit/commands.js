@@ -1,7 +1,7 @@
 // The window's commands for both cockpit layouts: what keys.json binds, what the palette lists and what the keys sheet
 // shows. The one copy each layout always shows runs them (the status bar in Cockpit, the top bar in Cockpit Chat).
 
-import { run, shared, setShared, keys, commands, focused, openOverlay, spaces, notify, terminals } from "herdr";
+import { run, shared, setShared, keys, commands, focused, openOverlay, spaces, notify, terminals, agents } from "herdr";
 import * as hub from "./hub.js";
 import { fleet, goToAgent } from "./fleet.js";
 import { show, showWork, showTab, screens, screensOf, layoutName, shownLayout, toggleSidebar, nodeOf, agentInView, CHAT_SUBJECT, CHAT_PIN, pinChat } from "./screens.js";
@@ -248,7 +248,14 @@ export function openPanel(name) {
   if (shared("cockpit.app") !== screens().work) showWork();
 }
 
-/** Closes the side panel, and says so: the drawer on the edge takes over from the flag. */
+/** A `doc-shown`/`doc-open` argument, `<terminal>:<view>[|<title>]`. */
+function docArgs(arg) {
+  const at = arg.indexOf(":");
+  const [name, ...title] = arg.slice(at + 1).split("|");
+  return { terminal: arg.slice(0, at), name, title: title.join("|") };
+}
+
+/** Closes the side panel, and says so: the activity bar on the edge stays, and opens it again. */
 export function closePanel() {
   setShared(PANELED, false);
   run("layout.hide", { id: "panel" });
@@ -541,6 +548,25 @@ const WINDOW = {
     openPanel(name);
     if (name === "show" && key.length) hub.focusHere({ app: "show", key: key.join(":") });
   },
+  // `doc-shown:<terminal>:<view>|<title>`: an agent showed a view. It is picked in place when its agent is in front with
+  // the panel open; otherwise a toast says so, and its click (`doc-open`) brings it up.
+  "doc-shown:": (arg) => {
+    const { terminal, name, title } = docArgs(arg);
+    if (panelOpen() && focused()?.terminal === terminal) {
+      hub.focusHere({ app: "show", key: name });
+      return;
+    }
+    const agent = agents().find((a) => a.address === terminal);
+    const who = agent?.tab_name || agent?.title || terminal;
+    notify({ title: `${who} shows a view`, body: title || name, level: "info", timeout: 8000, action: { name: `cockpit.doc-open:${terminal}:${name}` } });
+  },
+  // `doc-open:<terminal>:<view>`: that agent in front, the panel open on the view.
+  "doc-open:": (arg) => {
+    const { terminal, name } = docArgs(arg);
+    goToAgent({ address: terminal });
+    openPanel("show");
+    hub.focusHere({ app: "show", key: name });
+  },
   "doc:": (name, _cx, ctx) => {
     openPanel("show");
     run(ctx.person ? keyed(`cockpit.show:go:${name}`) : `cockpit.show:go:${name}`);
@@ -615,6 +641,7 @@ function argOk(name, arg, layout) {
   if (name === "via:") return arg.includes("|") && hasScreen(layout, arg.slice(0, arg.indexOf("|")));
   if (name === "panel:") return has(PANELS, arg);
   if (name === "panel-open:") return has(PANELS, arg.split(":")[0]);
+  if (name === "doc-shown:" || name === "doc-open:") return arg.indexOf(":") > 0;
   return true;
 }
 

@@ -239,7 +239,7 @@ fn any_agent_reads_any_tool_through_cockpit() {
 }
 
 #[test]
-fn show_in_the_app_opens_documents_for_a_new_view() {
+fn show_in_the_app_tells_the_window_of_a_new_view() {
     let sandbox = Sandbox::new();
     let bin = sandbox.root.join("bin/herdr-app");
     executable(
@@ -259,8 +259,9 @@ fi
     let mut server = Server::start(&sandbox, &[("HC_TERMINAL_ID", "t14"), ("HERDR_APP_BIN", bin.to_str().unwrap())]);
     let args = json!({"name":"show","arguments":{"pane":"quota","title":"Quota","blocks":[{"type":"markdown","text":"ENG-412"}]}});
     let shown = server.ask("tools/call", args.clone());
-    assert_eq!(shown["result"]["content"][0]["text"], "Opened quota in Documents beside this session.");
-    assert!(sandbox.calls().iter().any(|c| c.starts_with("do cockpit.panel-open:show:quota")));
+    assert_eq!(shown["result"]["content"][0]["text"], "Put quota in Documents beside this session.");
+    assert!(sandbox.calls().iter().any(|c| c.starts_with("do cockpit.doc-shown:t14:quota|Quota")), "the window is told");
+    assert!(!sandbox.calls().iter().any(|c| c.starts_with("do pane.focus")), "the person is not taken to the agent");
     let before = sandbox.calls().iter().filter(|c| c.starts_with("do ")).count();
     assert_eq!(server.ask("tools/call", args)["result"]["content"][0]["text"], "Updated quota in Documents.");
     assert_eq!(sandbox.calls().iter().filter(|c| c.starts_with("do ")).count(), before);

@@ -15,7 +15,9 @@ export async function runWindowCommand(cmd, {machine,now=Date.now,herdrApp,run,c
     if (expired()) return {error:"expired"};
     const name = cmd.cmd === "do" ? cmd.command : cmd.cmd;
     const cockpit = /^cockpit\.(go|panel-open):/.test(name ?? "");
-    if (!WINDOW_COMMANDS.has(name) && !cockpit) return {error:`${name} is not a command this window runs for ${machine}`};
+    // `cockpit.doc-shown:<terminal>:<view>|<title>`: an agent showed a view; its terminal is checked and named as here.
+    const shown = /^cockpit\.doc-shown:([^:]+):([\s\S]*)$/.exec(name ?? "");
+    if (!WINDOW_COMMANDS.has(name) && !cockpit && !shown) return {error:`${name} is not a command this window runs for ${machine}`};
     if (!["do","ls","status"].includes(cmd.cmd)) return {error:"invalid window operation"};
     if (name === "cockpit.focus") { await focus(cmd.args?.target); return {value:{}}; }
     if (cockpit) { await run(name); return {value:{}}; }
@@ -26,6 +28,14 @@ export async function runWindowCommand(cmd, {machine,now=Date.now,herdrApp,run,c
       if (value.error) throw new Error(value.error);
       return value;
     };
+    if (shown) {
+      const terminal = toDesktop(shown[1],machine);
+      const listed = await call(["ls"]);
+      const terms = (listed.spaces ?? []).filter(s=>s.machine===machine).flatMap(s=>s.tabs ?? []).flatMap(t=>t.terminals ?? []);
+      if (!terms.some(t=>t.terminal===terminal)) return {error:`cockpit.doc-shown needs a target belonging to ${machine}`};
+      await run(`cockpit.doc-shown:${terminal}:${shown[2]}`);
+      return {value:{}};
+    }
     if (cmd.cmd === "ls") {
       const listed = await call(["ls"]);
       return {value:runnerValue({...listed,spaces:(listed.spaces ?? []).filter(s=>s.machine===machine)},machine)};

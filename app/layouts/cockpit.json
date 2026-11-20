@@ -128,10 +128,20 @@
                         { "id": "changes", "type": "block", "content": { "mod": "changes" } },
                         { "id": "web", "type": "block", "content": { "mod": "cockpit", "props": { "app": "web" } } }
                       ]
-                    },
-                    { "id": "activity", "type": "block", "size": { "px": 44 }, "content": { "mod": "cockpit", "props": { "app": "activity", "stack": "panel-body" } } }
+                    }
                   ],
                   "shadow": "sm"
+                },
+                {
+                  "id": "activity",
+                  "type": "block",
+                  "size": { "px": 44 },
+                  "radius": 10,
+                  "border": { "width": 1, "color": "border" },
+                  "background": "chrome",
+                  "resizable": false,
+                  "shadow": "sm",
+                  "content": { "mod": "cockpit", "props": { "app": "activity", "stack": "panel-body" } }
                 }
               ]
             },

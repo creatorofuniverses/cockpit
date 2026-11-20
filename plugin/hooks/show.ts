@@ -353,12 +353,12 @@ async function presentNative($: $,name:string,spec:Spec,here:Here|undefined,exis
   }
   if (!here) return {result:`Wrote the view to ${await showDir($)}/${name}.json, but this session is in neither herdr nor the Herdr app, so no pane opened.`}
   if (documents) {
-    const focused = await appCall($,['do','pane.focus',JSON.stringify({terminal:here.terminal})])
-    if ('error' in focused) return {result:await windowFailure($,name,focused)}
-    const opened = await appCall($,['do',`cockpit.panel-open:show:${name}`,'{}'])
-    if ('error' in opened) return {result:await windowFailure($,name,opened)}
+    // The person is told, not taken there: the window picks it in place only while they look at this agent.
+    const title = String(spec.title ?? '').replace(/[\n|]/g,' ')
+    const told = await appCall($,['do',`cockpit.doc-shown:${here.terminal}:${name}|${title}`,'{}'])
+    if ('error' in told) return {result:await windowFailure($,name,told)}
     shownSeen = undefined
-    return {result:`Opened ${name} in Documents beside this session.`,documents:true}
+    return {result:`Put ${name} in Documents beside this session.`,documents:true}
   }
   if (await isOpen($,await showDir($),name)) return {result:`Updated the ${name} pane.`}
   const failure = await openPane($,here,name,spec.placement ?? 'right')

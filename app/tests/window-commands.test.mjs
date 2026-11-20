@@ -633,7 +633,7 @@ const SHAPES = {
   // The runner's commands (commands.js), both layouts.
   palette: ["palette", "nav"], keys: ["keys", "nav"], recap: ["recap", "nav"], "recap:": ["recap:needs_you", "nav"],
   "next-waiting": ["next-waiting", "nav"], "next:blocked": ["next:blocked", "nav"], "next:done": ["next:done", "nav"],
-  panel: ["panel", "nav"], "panel:": ["panel:review", "nav"], "panel-open:": ["panel-open:show:quota", "nav"], "doc:": ["doc:deploy", "nav"], "go:": ["go:inbox", "nav"],
+  panel: ["panel", "nav"], "panel:": ["panel:review", "nav"], "panel-open:": ["panel-open:show:quota", "nav"], "doc:": ["doc:deploy", "nav"], "doc-shown:": ["doc-shown:t1:quota|Quota", "nav"], "doc-open:": ["doc-open:t1:quota", "nav"], "go:": ["go:inbox", "nav"],
   "via:": ["via:chat|chat:mode", "nav"], pr: ["pr", "nav"], ticket: ["ticket", "nav"],
   resume: ["resume", "allowed"], "link:": ["link:https://acme.example/x", "nav"], "target:": [`target:act:merge:${PR}`, "nav"],
   update: ["update", "nav"], settings: ["settings", "nav"], "settings:": ["settings:health", "nav"], diagnostics: ["diagnostics", "nav"], usage: ["usage", "nav"], start: ["start", "nav"],
@@ -1037,4 +1037,21 @@ test("a notification a client sent is drawn plain: never cockpit's icon nor the 
   assert.equal(forged.icon, undefined, "no cockpit icon");
   assert.equal(forged.title, "From an agent's tools (app:t3): ✅ Tests passed");
   assert.deepEqual(forged.action, { name: "cockpit.target:inbox:ENG-412" }, "its click still only brings the row into view");
+});
+
+test("an agent's new view tells the person with a toast and takes them nowhere; its click brings it up", async () => {
+  for (const layout of ["cockpit", "cockpit-chat"]) {
+    const f = await fixture({ layout, shown: layout === "cockpit" ? "home" : "chat" });
+    const v = views(f.mod, f);
+    const before = f.calls.length;
+    await dispatch(f, v, layout, "doc-shown:t14:quota|Quota for ENG-412");
+    const ran = f.calls.slice(before).map(([name]) => name);
+    assert.ok(!ran.some((n) => ["agent.focus", "pane.focus", "layout.show", "layout.select"].includes(n) || n.startsWith("cockpit.go:")), `${layout}: ${ran}`);
+    assert.equal(f.notices.at(-1).body, "Quota for ENG-412");
+    assert.equal(f.notices.at(-1).action.name, "cockpit.doc-open:t14:quota");
+    await dispatch(f, v, layout, f.notices.at(-1).action.name.replace(/^cockpit\./, ""));
+    const opened = f.calls.slice(before).map(([name, args]) => `${name} ${JSON.stringify(args ?? {})}`);
+    assert.ok(opened.includes('agent.focus {"terminal":"t14"}'), `${layout}: ${opened}`);
+    assert.ok(opened.includes('layout.show {"id":"panel"}'), `${layout}: ${opened}`);
+  }
 });

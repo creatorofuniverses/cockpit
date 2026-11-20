@@ -503,11 +503,12 @@ pub fn show(input: &Value, here: Option<&Here>, session: &str) -> Result<String,
         }
     } else if documents {
         if let Some(Here::App { terminal, .. }) = here {
-            let shown = frontend::window("do", "pane.focus", &json!({"terminal":terminal}))
-                .and_then(|_| frontend::window("do", &format!("cockpit.panel-open:show:{name}"), &json!({})));
+            // The person is told, not taken there: the window picks it in place only while they look at this agent.
+            let title = spec["title"].as_str().unwrap_or_default().replace(['\n', '|'], " ");
+            let shown = frontend::window("do", &format!("cockpit.doc-shown:{terminal}:{name}|{title}"), &json!({}));
             match shown {
                 Ok(_) if asked == "browser" => format!("No browser beside this session: {name} is in Documents instead."),
-                Ok(_) => format!("Opened {name} in Documents beside this session."),
+                Ok(_) => format!("Put {name} in Documents beside this session."),
                 Err(err) => error(err),
             }
         } else {
