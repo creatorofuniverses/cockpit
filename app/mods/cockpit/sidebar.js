@@ -4,7 +4,7 @@
 
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { run, shared, setShared, focused, spaces, agents, machines, hc, panes, terminals, setAgentOrder, notify, openOverlay, window as win, readTextFile, exec } from "herdr";
+import { run, shared, setShared, focused, spaces, agents, machines, hc, panes, terminals, setAgentOrder, notify, openOverlay, window as win, exec } from "herdr";
 import * as hub from "./hub.js";
 import { followBrowser } from "./web.js";
 import { deliver } from "./notify.js";
@@ -104,8 +104,7 @@ export default class Sidebar {
     cx.spawn(async (cx) => {
       try {
         this.install = await hub.install();
-        const { cache, home } = this.install;
-        const text = (await readTextFile(`${cache}/config.json`)) ?? (await readTextFile(`${home}/.config/cockpit/config.json`));
+        const text = await hub.configText();
         const pinned = text ? JSON.parse(text).spaces : null;
         if (Array.isArray(pinned)) this.spaces = pinned.map((s) => (typeof s === "string" ? s : s.name));
       } catch {}

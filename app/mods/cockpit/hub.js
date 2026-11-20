@@ -135,6 +135,14 @@ export async function install() {
   return installed.value;
 }
 
+/** cockpit's config.json, as the hub resolved it else as written, read on the machine the hub runs on; null when neither is there. */
+export async function configText() {
+  const { cache, home, machine } = await install();
+  const on = machine ? { on: machine } : undefined;
+  const read = (path) => readTextFile(path, on).catch(() => null);
+  return (await read(`${cache}/config.json`)) ?? (await read(`${home}/.config/cockpit/config.json`));
+}
+
 /** hub.json as written; a read the window never answers (a copy made in the middle of a layout switch) gives up. */
 async function readInfo(cx) {
   const { cache, machine } = await install();

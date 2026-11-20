@@ -640,3 +640,9 @@ test("a window that came up before its hub goes live as soon as hub.json names o
   assert.equal(f.calls.filter((c) => c[0] === "exec" && c[2].includes("start")).length, 1);
   sidebar.stop();
 });
+
+test("the config a window reads comes from the machine the hub runs on", async t => {
+  const f = await fixture(t);
+  assert.ok(await f.hub.configText());
+  assert.deepEqual(f.calls.filter(c => c[0] === "read" && c[1].endsWith("config.json")).map(c => [c[1], c[2]?.on]), [["/runner/cache/config.json", "runner"]]);
+});

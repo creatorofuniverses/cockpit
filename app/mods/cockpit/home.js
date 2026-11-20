@@ -5,7 +5,7 @@
 
 import { div, image } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
-import { run, spaces, setShared, layout, readTextFile } from "herdr";
+import { run, spaces, setShared, layout } from "herdr";
 import { show } from "./sidebar.js";
 import { findNode } from "./status.js";
 import * as hub from "./hub.js";
@@ -119,8 +119,7 @@ export default class Home {
     this.loadEvents(cx);
     cx.spawn(async (cx) => {
       try {
-        const { cache, home } = await hub.install();
-        const text = (await readTextFile(`${cache}/config.json`)) ?? (await readTextFile(`${home}/.config/cockpit/config.json`));
+        const text = await hub.configText();
         const spaces = text ? JSON.parse(text).spaces : null;
         if (Array.isArray(spaces)) this.pinned = spaces.map((s) => (typeof s === "string" ? s : s.name));
       } catch {}
