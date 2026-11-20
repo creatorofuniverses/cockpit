@@ -41,6 +41,9 @@ pub struct Live {
     pub context: Option<f64>,
     /// When its status began, when the source knows (the demo).
     pub since: Option<u64>,
+    /// What it left running in the background while its turn is closed ("1 shell still running"): it works on, without
+    /// a turn under way.
+    pub background: Option<String>,
 }
 
 /// A program's stdout when it exits 0 within `secs`, else None.
@@ -131,6 +134,7 @@ fn demo_lives(world: &Value) -> Vec<Live> {
                 roots: Vec::new(),
                 context: a["context"].as_f64(),
                 since: a["since"].as_u64(),
+                background: a["background"].as_str().map(str::to_string),
             }
         })
         .collect()
@@ -229,7 +233,7 @@ fn app_live(t: &Value, core: &Value, place: Place) -> Option<Live> {
             None => (unreported(agent.as_ref(), &found)?, found.got["title"].as_str().unwrap_or_default().to_string()),
         },
     };
-    let status = background(agent.as_ref(), found.transcript.as_deref(), &found.got, status);
+    let background = background(agent.as_ref(), found.transcript.as_deref(), &found.got, &status);
     let status = finished(agent.as_ref(), found.transcript.as_deref(), status);
     let or = |given: String, v: Option<&str>| if given.is_empty() { v.unwrap_or_default().to_string() } else { given };
     let labels = &found.got["labels"];
@@ -254,6 +258,7 @@ fn app_live(t: &Value, core: &Value, place: Place) -> Option<Live> {
         pid: found.got["pid"].as_u64().map(|p| p as u32),
         roots: [&found.got["pid"], &found.got["foreground"]["pid"]].iter().filter_map(|p| p.as_u64()).map(|p| p as u32).collect(),
         since: None,
+        background,
     })
 }
 
@@ -370,12 +375,12 @@ fn finished(agent: Option<&Agent>, transcript: Option<&str>, status: String) -> 
     if status == "idle" && ended() == Some(true) { "done".into() } else { status }
 }
 
-/// An agent that reports working only for what it left running (Claude Code says "1 shell still running") while its
-/// transcript closed its turn rests: idle until that work wakes it, its turn read again by `finished`.
-fn background(agent: Option<&Agent>, transcript: Option<&str>, got: &Value, status: String) -> String {
-    let waits = got["status"]["msg"].as_str().is_some_and(|m| m.contains("still running"));
+/// What an agent that reports working only for what it left running works on (Claude Code says "1 shell still running"),
+/// when its transcript closed its turn; None while a turn is under way or nothing is left running.
+fn background(agent: Option<&Agent>, transcript: Option<&str>, got: &Value, status: &str) -> Option<String> {
+    let msg = got["status"]["msg"].as_str().filter(|m| m.contains("still running"))?;
     let ended = || Some(transcripts::turn(agent?.transcripts, Path::new(transcript?))? == Turn::Done);
-    if status == "working" && waits && ended() == Some(true) { "idle".into() } else { status }
+    (status == "working" && ended() == Some(true)).then(|| msg.to_string())
 }
 
 /// The status of an agent that reports none to Herdr, from its transcript's last turn; None when it cannot be told.
@@ -505,6 +510,7 @@ fn tui_list() -> Vec<Live> {
             pid: pid.map(|p| p as u32),
             roots: ["pid", "foreground_pid"].iter().filter_map(|k| p[*k].as_u64()).map(|p| p as u32).collect(),
             since: None,
+            background: None,
         });
     }
     out
@@ -730,7 +736,7 @@ mod tests {
     }
 
     #[test]
-    fn a_claude_session_that_closed_its_turn_rests_while_its_background_shells_run() {
+    fn a_claude_session_that_closed_its_turn_works_on_while_its_background_shells_run() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("s.jsonl");
         let lines = |last: &str| {
@@ -742,14 +748,14 @@ mod tests {
         };
         let claude = agent::builtin().into_iter().find(|x| x.id == "claude").unwrap();
         let shells = json!({"status": {"app": "claude-code", "msg": "1 shell still running", "state": "working"}});
-        let rests = |got: &Value| background(Some(&claude), path.to_str(), got, "working".into());
+        let works_on = |got: &Value| background(Some(&claude), path.to_str(), got, "working");
         std::fs::write(&path, lines(r#"{"type": "system", "subtype": "turn_duration"}"#)).unwrap();
-        assert_eq!(rests(&shells), "idle", "its turn closed: it only waits on what it left running");
-        assert_eq!(rests(&json!({"status": {"app": "claude-code", "state": "working"}})), "working", "a /compact closes no turn yet says nothing more");
-        assert_eq!(background(Some(&claude), path.to_str(), &shells, "blocked".into()), "blocked", "only a working word rests");
+        assert_eq!(works_on(&shells).as_deref(), Some("1 shell still running"), "its turn closed: it works on what it left running");
+        assert_eq!(works_on(&json!({"status": {"app": "claude-code", "state": "working"}})), None, "a /compact closes no turn yet says nothing more");
+        assert_eq!(background(Some(&claude), path.to_str(), &shells, "blocked"), None, "only a working agent works in the background");
         std::fs::write(&path, lines(r#"{"type": "assistant", "message": {"role": "assistant", "content": "On it"}}"#)).unwrap();
-        assert_eq!(rests(&shells), "working", "a turn under way works, shells or not");
-        assert_eq!(background(None, path.to_str(), &shells, "working".into()), "working", "no agent, nothing to read");
+        assert_eq!(works_on(&shells), None, "a turn under way is its own work, shells or not");
+        assert_eq!(background(None, path.to_str(), &shells, "working"), None, "no agent, nothing to read");
     }
 
     #[test]

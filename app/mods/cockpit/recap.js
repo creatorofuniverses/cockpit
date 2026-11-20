@@ -162,7 +162,7 @@ export default class Recap {
     const head = h_flex()
       .gap(10)
       .items_center()
-      .child(h_flex().w(16).flex_none().justify_center().child(StageMark(id, r.stage, { size: 9, status: r.status })))
+      .child(h_flex().w(16).flex_none().justify_center().child(StageMark(id, r.stage, { size: 9, status: r.status, background: r.background })))
       .child(AgentLogo(r, { size: 16, tooltip: r.agent_name, id: `${id}-logo` }))
       .child(div().flex_shrink_1().min_w(0).truncate().text_size(TEXT.lg).font_semibold().text_color(k.foreground).child(r.title || r.tab?.name || r.address))
       .child(Chip(`${r.space?.name ?? ""} · ${r.tab?.name ?? ""}`, { mono: true, icon: "terminal" }))

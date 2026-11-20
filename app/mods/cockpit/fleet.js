@@ -135,6 +135,8 @@ export function fleet(rows, home) {
       // Herdr's word can stay blocked after the prompt went: the hub read the agent's screen and transcript since.
       status: a.status == null ? a.status : agentStatus(a.status) === "blocked" && r.status && r.status !== "blocked" ? agentStatus(r.status) : agentStatus(a.status),
       interrupted: Boolean(r.interrupted),
+      // Its turn closed, it works on what it left running ("1 shell still running"), as the hub reads it.
+      background: r.status === "working" ? r.background ?? null : null,
       error: r.error ?? null,
       // The hub names an agent (`names::pick`, its tab's label included); until it lists one, Herdr's title stands in.
       title: r.title ?? a.title ?? a.address,

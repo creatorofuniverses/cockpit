@@ -59,21 +59,22 @@ export function stageColor(stage) {
   return k[tone] ?? k.dim;
 }
 
-/** The word for how long a row has been in its stage: "waiting 4m", "done 9m", "working 2m". */
+/** The word for how long a row has been in its stage: "waiting 4m", "done 9m", "working 2m", "in background 6m". */
 export function stageAge(row, now = Date.now()) {
   const age = dur(now - (row.since ?? now));
-  const word = { needs_you: "waiting", failed: "stopped", done: row.interrupted ? "stopped by you" : "done", working: "working", snoozed: row.snoozed?.label ?? "snoozed", dismissed: "dismissed" }[row.stage];
+  const word = { needs_you: "waiting", failed: "stopped", done: row.interrupted ? "stopped by you" : "done", working: row.background ? "in background" : "working", snoozed: row.snoozed?.label ?? "snoozed", dismissed: "dismissed" }[row.stage];
   return row.stage === "snoozed" || row.stage === "dismissed" ? word : word ? `${word} ${age}` : age;
 }
 
 /**
- * The stage's mark: a breathing dot while it needs you, a spinner while it works, a ring at rest. A dismissed agent
- * keeps the colour of its real `status`, as a still ring.
+ * The stage's mark: a breathing dot while it needs you, a spinner while it works, an hourglass while it works only on
+ * what it left running in the `background`, a ring at rest. A dismissed agent keeps the colour of its real `status`, as
+ * a still ring.
  */
-export function StageMark(id, stage, { size = 8, status } = {}) {
+export function StageMark(id, stage, { size = 8, status, background } = {}) {
   const c = stageColor(stage);
   if (stage === "dismissed") return div().size(size).flex_none().rounded(size / 2).border_1().border_color(statusColor(tokens(), agentStatus(status ?? "blocked")));
-  if (stage === "working") return Spinner({ size: size + 4, color: c });
+  if (stage === "working") return background ? Icon("hourglass", { size: size + 4, color: c }) : Spinner({ size: size + 4, color: c });
   if (stage === "snoozed") return Icon("alarm-clock", { size: size + 4, color: c });
   if (stage === "merged") return Icon("git-merge", { size: size + 4, color: c });
   if (stage === "failed") return Icon("circle-x", { size: size + 4, color: c });

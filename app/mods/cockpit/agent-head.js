@@ -11,7 +11,7 @@ import { fleet, goToAgent, agentAct } from "./fleet.js";
 import { hint, keyFor, keyText, available } from "./commands.js";
 import { layoutName } from "./screens.js";
 import { statusColor } from "./agentsui.js";
-import { tokens, TEXT, Spinner, Button, Chip, Mono, dur, AgentLogo } from "./ui.js";
+import { tokens, TEXT, Icon, Spinner, Button, Chip, Mono, dur, AgentLogo } from "./ui.js";
 
 // The agents, Home and queue views, followed once per window whichever copies ask (feed.js).
 const following = sharing(hub.subscribe);
@@ -127,8 +127,8 @@ export default class AgentHead {
           .flex_none()
           .gap(5)
           .items_center()
-          .child(a.status === "working" ? Spinner({ size: 11, color }) : div().size(7).rounded(4).bg(color))
-          .child(div().text_size(TEXT.xs).text_color(a.status === "blocked" || a.status === "failed" ? color : k.mutedFg).child(`${a.status === "done" && a.interrupted ? "stopped by you" : (WORD[a.status] ?? a.status)}${since ? ` · ${dur(this.now - since)}` : ""}`)),
+          .child(a.status === "working" ? (a.background ? Icon("hourglass", { size: 11, color }) : Spinner({ size: 11, color })) : div().size(7).rounded(4).bg(color))
+          .child(div().text_size(TEXT.xs).text_color(a.status === "blocked" || a.status === "failed" ? color : k.mutedFg).child(`${a.status === "done" && a.interrupted ? "stopped by you" : (a.status === "working" && a.background ? a.background : (WORD[a.status] ?? a.status))}${since ? ` · ${dur(this.now - since)}` : ""}`)),
       )
       .when(Boolean(a.branch), (e) => e.child(div().min_w(0).truncate().child(Mono(a.branch, { color: k.dim }))))
       .children(

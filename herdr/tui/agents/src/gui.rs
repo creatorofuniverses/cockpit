@@ -840,7 +840,7 @@ pub fn view(args: &Value, doc: &dyn Fn(&str) -> Value) -> Value {
             "agent_name": cockpit_core::agent::display_name_in(&table, if l.agent.is_empty() { &l.program } else { &l.agent }),
             "reports_limits": cockpit_core::agent::reports(if l.agent.is_empty() { &l.program } else { &l.agent }).is_some(),
             "since": entry.since, "waiting_since": if l.status == "blocked" { json!(entry.since) } else { Value::Null },
-            "question": question, "waits": waits, "said": a.said,
+            "question": question, "waits": waits, "said": a.said, "background": l.background,
             "identity": if blocked { a.question.as_ref().map_or(json!("terminal"), |q| json!(q.identity())) } else { Value::Null }, "recap": recap, "stage": stage,
             "repo": repo, "branch": branch, "cwd": l.cwd, "ticket": ticket, "pr": pr, "ci": ci, "changes": changes,
             // What the session cost so far as cockpit estimates it everywhere, never the figure the agent reports.
@@ -849,7 +849,7 @@ pub fn view(args: &Value, doc: &dyn Fn(&str) -> Value) -> Value {
             "page": f["page"].as_str().or(mock["page"].as_str()),
             "time": time(totals.agents.get(&l.handle).copied().unwrap_or(0), ticket_secs),
             "snoozed": snoozed, "dismissed": Value::Null, "seen": seen, "unread": unread, "session": session, "interrupted": interrupted,
-            "stoppable": stop_keys(agent, &l.status).is_ok(), "interrupt": agent.and_then(|a| a.interrupt.as_ref()).map_or(Value::Null, |keys| json!(keys)),
+            "stoppable": stop_keys(agent, &l.status).is_ok() && l.background.is_none(), "interrupt": agent.and_then(|a| a.interrupt.as_ref()).map_or(Value::Null, |keys| json!(keys)),
             "error": if l.status == "failed" { mock["error"].clone() } else { Value::Null },
             "load": crate::load::of(l, session.as_deref()),
             "links": links, "documents": crate::links::documents(&shown, &[&l.handle, &l.address]),

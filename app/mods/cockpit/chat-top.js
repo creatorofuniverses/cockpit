@@ -37,11 +37,11 @@ export function lightsRoom(settings_zoom = 1) {
   return w?.platform === "macos" && w?.titlebar === "none" && !w?.fullscreen && lights ? (lights[0] + 60) / settings_zoom : 12;
 }
 
-/** What a tab's agent is doing, as a shape so it reads without colour. */
-export function statusMark(raw, k) {
+/** What a tab's agent is doing, as a shape so it reads without colour; an hourglass while it works only in the `background`. */
+export function statusMark(raw, k, background = null) {
   const status = agentStatus(raw);
   if (status === "failed") return Icon("circle-x", { size: 13, color: k.destructive });
-  if (status === "working") return Spinner({ size: 13, color: k.working });
+  if (status === "working") return background ? Icon("hourglass", { size: 13, color: k.working }) : Spinner({ size: 13, color: k.working });
   if (status === "done") return Icon("check", { size: 13, color: k.done });
   if (status === "blocked") return div().size(9).m(2).rounded(5).bg(k.blocked);
   return div().size(12).m(0.5).rounded(6).border_1().border_color(k.dim);
@@ -253,7 +253,7 @@ export default class ChatTop {
         cx.notify();
       })
       .tooltip(agent?.agent_name || agent?.program?.name ? `${tabName(t, this.rows)} · ${agent.agent_name || agent.program.name}` : tabName(t, this.rows))
-      .child(statusMark(t.status, k))
+      .child(statusMark(t.status, k, agent?.background))
       .when(Boolean(agent), (e) => e.child(AgentLogo(agent, { size: 13 })))
       .child(div().max_w(170).truncate().child(tabName(t, this.rows)))
       .when(Boolean(age), (e) => e.child(div().flex_none().text_size(TEXT.xs).text_color(k.blocked).child(age)))

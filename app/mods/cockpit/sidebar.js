@@ -476,7 +476,7 @@ export default class Sidebar {
       )
       .on_click((_e, cx) => this.agents.go(cx, r))
       .on_mouse_down("right", () => this.agents.menu(r))
-      .child(h_flex().w(14).flex_none().justify_center().child(StageMark(id, r.stage, { status: r.status })))
+      .child(h_flex().w(14).flex_none().justify_center().child(StageMark(id, r.stage, { status: r.status, background: r.background })))
       .child(AgentLogo(r, { size: 14, tooltip: r.agent_name, id: `${id}-logo` }))
       .child(
         v_flex()
@@ -506,7 +506,7 @@ export default class Sidebar {
     const recap = r.recap?.text;
     const card = v_flex()
       .gap(8)
-      .child(h_flex().gap(8).items_center().child(StageMark(`${id}-hc`, r.stage, { status: r.status })).child(AgentLogo(r, { size: 14 })).child(div().flex_1().font_semibold().child(r.title || r.address)).child(div().text_size(TEXT.xs).text_color(stageColor(r.stage)).child(stageAge(r, now))))
+      .child(h_flex().gap(8).items_center().child(StageMark(`${id}-hc`, r.stage, { status: r.status, background: r.background })).child(AgentLogo(r, { size: 14 })).child(div().flex_1().font_semibold().child(r.title || r.address)).child(div().text_size(TEXT.xs).text_color(stageColor(r.stage)).child(stageAge(r, now))))
       .child(div().text_size(TEXT.sm).text_color(recap ? k.foreground : k.mutedFg).child(recap || (r.recap?.running ? "Recapping…" : r.said || "No recap yet: right-click › Recap.")))
       .child(h_flex().flex_wrap().gap(4).children(Chips(r, { id: `${id}-hc` })))
       .child(div().text_size(TEXT.xs).text_color(k.dim).child(`${r.agent_name ? `${r.agent_name} · ` : ""}${r.driven ? `A session cockpit drives · ${String(r.cwd ?? "").split("/").pop()}` : `${r.space?.name ?? ""} · ${r.tab?.name ?? ""}`}${r.cost ? ` · ~$${r.cost.toFixed(2)} estimated` : ""}${r.context ? ` · context ${Math.round(r.context)}%` : ""}`));
@@ -815,7 +815,7 @@ export default class Sidebar {
           run("pane.focus", { pane: p.pane });
           showPanes();
         })
-        .child(h_flex().w(12).flex_none().justify_center().child(stage ? StageMark(`term-${p.terminal}`, stage, { size: 6, status: r?.status }) : Icon("terminal", { size: 11, color: k.dim })))
+        .child(h_flex().w(12).flex_none().justify_center().child(stage ? StageMark(`term-${p.terminal}`, stage, { size: 6, status: r?.status, background: r?.background }) : Icon("terminal", { size: 11, color: k.dim })))
         .when(Boolean(r) || p.program?.agent, (e) => e.child(AgentLogo(r ? { ...r, program: p.program } : { program: p.program }, { size: 12, color: k.mutedFg })))
         .child(div().min_w(0).truncate().text_size(TEXT.sm).text_color(stage === "needs_you" ? k.blocked : k.mutedFg).child(named ? title : name))
         .when(named, (e) => e.child(div().flex_none().text_size(TEXT.xs).text_color(k.dim).child(name)));
