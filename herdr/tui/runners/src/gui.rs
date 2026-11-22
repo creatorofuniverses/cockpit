@@ -146,6 +146,13 @@ mod tests {
             let script = format!("#!/bin/sh\necho \"$*\" >> \"$(dirname \"$0\")/calls\"\ncase \"$1\" in\nversion) {version} ;;\nstatus) {status} ;;\nesac\n");
             fs::write(&bin, script).unwrap();
             fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
+            // A forked test thread can still hold the write fd for a moment, and exec then fails with ETXTBSY.
+            let mut tries = 0;
+            while let Err(e) = Command::new(&bin).arg("ready").output() {
+                tries += 1;
+                assert!(e.raw_os_error() == Some(26) && tries < 200, "{e}");
+                std::thread::sleep(Duration::from_millis(10));
+            }
             Fake { dir, bin }
         }
 
@@ -243,7 +250,7 @@ mod tests {
         source(Some(fake.bin.clone()));
         source(Some(fake.bin.clone()));
         assert_eq!(fake.calls("version"), 1);
-        let file = fs::File::options().write(true).open(&fake.bin).unwrap();
+        let file = fs::File::options().read(true).open(&fake.bin).unwrap();
         file.set_modified(SystemTime::now() + Duration::from_secs(60)).unwrap();
         drop(file);
         source(Some(fake.bin.clone()));

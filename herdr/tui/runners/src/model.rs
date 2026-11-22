@@ -153,10 +153,7 @@ fn build(source: Source, watched: &Path, now: DateTime<Utc>) -> Value {
     let queue = &status["queue"];
     let queued = queue["queued_runs"].as_u64();
     let cost = raw.iter().map(|s| s["cost_estimate_rub"].as_f64()).sum::<Option<f64>>().map(rubles);
-    let queue_stale = match (queued, time(&queue["at"]), time(&tick["last_at"])) {
-        (Some(_), Some(q), Some(t)) => q < t,
-        _ => false,
-    };
+    let queue_stale = queued.is_some() && queue["stale"] == true;
     let tiles = json!({
         "servers": servers.len(), "runners": runners, "busy": busy, "queued": queued,
         "queue_ago": queued.and_then(|_| since(&queue["at"], minute)).map(span), "queue_stale": queue_stale, "cost": cost,
@@ -299,14 +296,12 @@ mod tests {
     }
 
     #[test]
-    fn a_queue_older_than_the_tick_is_stale() {
+    fn a_queue_is_stale_only_when_the_service_says_so() {
         let mut status = fixture();
-        status["tick"]["last_at"] = json!("2026-11-22T19:01:13Z");
-        status["queue"]["at"] = json!("2026-11-22T18:57:13Z");
-        assert_eq!(live(status.clone())["tiles"]["queue_stale"], true);
-        status["queue"]["at"] = json!("2026-11-22T19:01:13Z");
         assert_eq!(live(status.clone())["tiles"]["queue_stale"], false);
-        status["queue"]["at"] = json!("2026-11-22T19:01:20Z");
+        status["queue"]["stale"] = json!(true);
+        assert_eq!(live(status.clone())["tiles"]["queue_stale"], true);
+        status["queue"]["stale"] = json!(false);
         assert_eq!(live(status.clone())["tiles"]["queue_stale"], false);
         status["queue"] = Value::Null;
         assert_eq!(live(status)["tiles"]["queue_stale"], false);

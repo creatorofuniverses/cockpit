@@ -89,7 +89,7 @@ expression: "serde_json::to_string_pretty(&live(fixture())).unwrap()"
     "busy": 1,
     "cost": "≈ 53 ₽",
     "queue_ago": "4m",
-    "queue_stale": true,
+    "queue_stale": false,
     "queued": 3,
     "runners": 2,
     "servers": 3

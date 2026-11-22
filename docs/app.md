@@ -1632,8 +1632,8 @@ ci-runners disagree on the format"), `ci-runners status is not understood`. `no-
 a tick uninstalled after it ran stays `live`, and the service's own warnings say what is wrong. A warning without `text`
 shows its `kind`. Times are counted from the start of the current minute, so the model moves once a minute. Costs are the service's estimates, shown
 as `≈ N ₽`, and the tile total is `null` when any server lacks one. When the service's `state_dir` is not the folder the
-hub watches, a `state-dir` warning says the view updates every 20 seconds. `queue_ago` is the age of the queue count and is present whenever the queue is polled; `queue_stale` is true when
-`queue.at` is earlier than `tick.last_at`, and the screen marks it in the warning tone.
+hub watches, a `state-dir` warning says the view updates every 20 seconds. `queue_ago` is the age of the queue count and is present whenever the queue is polled; `queue_stale` is the service's `queue.stale` flag
+(missing reads false): the last queue poll failed and the count is the last good one. The screen marks it in the warning tone.
 
 For the sandbox, `scripts/fake-ci-runners.sh` answers `version --json` and `status --json --offline` from the crate's
 fixtures (`CI_RUNNERS_FAKE=stale` serves the one with a stale tick):
