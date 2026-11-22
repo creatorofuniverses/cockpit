@@ -681,6 +681,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cockpit-runners"
+version = "1.1.0"
+dependencies = [
+ "chrono",
+ "cockpit-core",
+ "insta",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "cockpit-show"
 version = "1.1.0"
 dependencies = [

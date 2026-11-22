@@ -1,0 +1,103 @@
+---
+source: runners/src/model.rs
+expression: "serde_json::to_string_pretty(&live(fixture())).unwrap()"
+---
+{
+  "badge": {
+    "count": 1,
+    "tone": "warning"
+  },
+  "error": null,
+  "line": {
+    "text": "3 servers · 1 busy · 3 queued",
+    "tone": "warning"
+  },
+  "servers": [
+    {
+      "age": "1h 21m",
+      "cost": "≈ 13 ₽",
+      "drain": false,
+      "flavor": "SL1.8-16384-128",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "image": "ci-runner-demo-image",
+      "name": "sel-ci-demo1",
+      "next": null,
+      "phase": "busy",
+      "role": "runner",
+      "runner": {
+        "busy": true,
+        "idle": null,
+        "name": "sel-ci-demo1-1",
+        "online": true
+      },
+      "size": "8 vCPU · 16 GiB · 128 GB",
+      "status": "ACTIVE",
+      "trial_label": null,
+      "warned": false
+    },
+    {
+      "age": "8m",
+      "cost": "≈ 4 ₽",
+      "drain": false,
+      "flavor": "SL1.8-16384-128",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "image": "ci-runner-demo-image",
+      "name": "sel-ci-demo2",
+      "next": {
+        "at": "2026-11-22T19:10:00Z",
+        "text": "delete in 9m · idle"
+      },
+      "phase": "idle",
+      "role": "runner",
+      "runner": {
+        "busy": false,
+        "idle": "6m",
+        "name": "sel-ci-demo2-1",
+        "online": true
+      },
+      "size": "8 vCPU · 16 GiB · 128 GB",
+      "status": "ACTIVE",
+      "trial_label": null,
+      "warned": true
+    },
+    {
+      "age": "31m",
+      "cost": "≈ 36 ₽",
+      "drain": false,
+      "flavor": "SL1.8-16384-128",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "image": "ci-runner-base-demo",
+      "name": "sel-img-demo",
+      "next": null,
+      "phase": "building",
+      "role": "image-builder",
+      "runner": null,
+      "size": "8 vCPU · 16 GiB · 128 GB",
+      "status": "ACTIVE",
+      "trial_label": "trial-1",
+      "warned": false
+    }
+  ],
+  "state": "live",
+  "tick": {
+    "ago": "<1m",
+    "errors": 0,
+    "ok": true,
+    "stale": false
+  },
+  "tiles": {
+    "busy": 1,
+    "cost": "≈ 53 ₽",
+    "queue_ago": "4m",
+    "queued": 3,
+    "runners": 2,
+    "servers": 3
+  },
+  "warnings": [
+    {
+      "kind": "idle-long",
+      "object": "00000000-0000-4000-8000-000000000002",
+      "text": "sel-ci-demo2 has been idle for 6 min"
+    }
+  ]
+}
