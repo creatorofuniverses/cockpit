@@ -113,6 +113,17 @@ test("the header says nothing about the tick when it has not run", async () => {
   const none = { ...m, state: "no-tick", tick: { ago: null, ok: false, errors: 0, stale: false } };
   assert.equal(f.runners.tickText(none), null);
   assert.equal(f.runners.tickText({ state: "absent" }), null);
+  assert.equal(f.runners.tickText({ ...m, tick: { ...m.tick, ok: false, errors: 1 } }), "tick <1m ago · 1 error");
+  assert.equal(f.runners.tickText({ ...m, tick: { ...m.tick, ok: false, errors: 3 } }), "tick <1m ago · 3 errors");
+  assert.equal(f.runners.tickText({ ...m, tick: { ...m.tick, ok: false, errors: 0 } }), "tick <1m ago · failed");
+});
+
+test("a server the tick leaves alone and one with unlisted runners say so", async () => {
+  const f = await fixture();
+  assert.equal(f.runners.phaseWords({ phase: "unowned" }), "not managed by tick");
+  assert.equal(f.runners.phaseWords({ phase: "unknown" }), "runner unknown");
+  const m = await model();
+  assert.equal(f.runners.phaseWords(m.servers[1]), "idle 14m");
 });
 
 test("every cost on a server is marked as an estimate", async () => {

@@ -21,7 +21,12 @@ expression: "serde_json::to_string_pretty(&live(fixture())).unwrap()"
       "id": "00000000-0000-4000-8000-000000000001",
       "image": "ci-runner-demo-image",
       "name": "sel-ci-demo1",
-      "next": null,
+      "next": {
+        "at": "2026-11-23T17:40:00Z",
+        "job_lost": true,
+        "overdue": false,
+        "text": "delete in 22h 38m · 24h · job lost"
+      },
       "phase": "busy",
       "role": "runner",
       "runner": {
@@ -44,14 +49,16 @@ expression: "serde_json::to_string_pretty(&live(fixture())).unwrap()"
       "image": "ci-runner-demo-image",
       "name": "sel-ci-demo2",
       "next": {
-        "at": "2026-11-22T19:10:00Z",
-        "text": "delete in 9m · idle"
+        "at": "2026-11-22T18:57:40Z",
+        "job_lost": false,
+        "overdue": true,
+        "text": "delete overdue 4m · idle"
       },
       "phase": "idle",
       "role": "runner",
       "runner": {
         "busy": false,
-        "idle": "6m",
+        "idle": "14m",
         "name": "sel-ci-demo2-1",
         "online": true
       },
@@ -68,7 +75,12 @@ expression: "serde_json::to_string_pretty(&live(fixture())).unwrap()"
       "id": "00000000-0000-4000-8000-000000000003",
       "image": "ci-runner-base-demo",
       "name": "sel-img-demo",
-      "next": null,
+      "next": {
+        "at": "2026-11-22T21:30:00Z",
+        "job_lost": false,
+        "overdue": false,
+        "text": "delete in 1h 28m · builder-max-age"
+      },
       "phase": "building",
       "role": "image-builder",
       "runner": null,
@@ -81,6 +93,7 @@ expression: "serde_json::to_string_pretty(&live(fixture())).unwrap()"
   "state": "live",
   "tick": {
     "ago": "<1m",
+    "error_text": null,
     "errors": 0,
     "ok": true,
     "stale": false
@@ -96,9 +109,9 @@ expression: "serde_json::to_string_pretty(&live(fixture())).unwrap()"
   },
   "warnings": [
     {
-      "kind": "idle-long",
+      "kind": "reap-overdue",
       "object": "00000000-0000-4000-8000-000000000002",
-      "text": "sel-ci-demo2 has been idle for 6 min"
+      "text": "sel-ci-demo2 is past its idle deadline by 4m and still listed"
     }
   ]
 }

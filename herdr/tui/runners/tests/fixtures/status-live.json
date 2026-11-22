@@ -1,41 +1,173 @@
 {
   "v": 1,
+  "offline": true,
+  "generated_at": "2026-11-22T19:01:40Z",
   "state_dir": "/home/me/.local/state/ci-runners",
-  "tick": {"last_at": "2026-11-22T19:01:13Z", "ok": true, "errors": 0, "error_text": null, "installed": true, "journal_error": null},
-  "queue": {"queued_runs": 3, "at": "2026-11-22T18:57:00Z"},
+  "self": {
+    "path": "/home/me/.local/bin/ci-runners",
+    "commit": "0000000000000000000000000000000000000000",
+    "modified": false
+  },
+  "inventory_at": "2026-11-22T19:01:13Z",
+  "sources": {
+    "servers": {
+      "ok": true,
+      "at": "2026-11-22T19:01:13Z"
+    },
+    "runners": {
+      "ok": true,
+      "at": "2026-11-22T19:01:13Z"
+    },
+    "volumes": {
+      "ok": true,
+      "at": "2026-11-22T19:01:13Z"
+    },
+    "images": {
+      "ok": true,
+      "at": "2026-11-22T19:01:13Z"
+    }
+  },
+  "tick": {
+    "last_at": "2026-11-22T19:01:13Z",
+    "ok": true,
+    "errors": 0,
+    "error_text": null,
+    "installed": true,
+    "binary": "/home/me/.local/bin/ci-runners",
+    "journal_error": null,
+    "inventory_error": null
+  },
+  "queue": {
+    "queued_runs": 3,
+    "at": "2026-11-22T18:57:00Z",
+    "stale": false
+  },
+  "image": {
+    "id": "00000000-0000-4000-8000-0000000000a1",
+    "name": "ci-runner-demo-image",
+    "status": "active",
+    "pins": "match",
+    "pins_checked_at": "2026-11-22T18:40:02Z"
+  },
   "warnings": [
-    {"kind": "idle-long", "text": "sel-ci-demo2 has been idle for 6 min", "object": "00000000-0000-4000-8000-000000000002"}
+    {
+      "kind": "reap-overdue",
+      "text": "sel-ci-demo2 is past its idle deadline by 4m and still listed",
+      "object": "00000000-0000-4000-8000-000000000002"
+    }
   ],
   "servers": [
     {
-      "id": "00000000-0000-4000-8000-000000000001", "name": "sel-ci-demo1", "role": "runner",
-      "status": "ACTIVE", "drain": false,
-      "flavor": "SL1.8-16384-128", "vcpus": 8, "ram_mb": 16384, "disk_gb": 128,
-      "image": "ci-runner-demo-image", "trial_label": null,
+      "id": "00000000-0000-4000-8000-000000000001",
+      "name": "sel-ci-demo1",
+      "role": "runner",
+      "status": "ACTIVE",
+      "drain": false,
+      "flavor": "SL1.8-16384-128",
+      "vcpus": 8,
+      "ram_mb": 16384,
+      "disk_gb": 128,
+      "image": "ci-runner-demo-image",
+      "trial_label": null,
       "created": "2026-11-22T17:40:00Z",
-      "runner": {"name": "sel-ci-demo1-1", "online": true, "busy": true, "idle_since": null},
-      "next": null,
+      "age_s": 4900,
+      "runner": {
+        "name": "sel-ci-demo1-1",
+        "seq": 1,
+        "online": true,
+        "busy": true,
+        "idle_since": null,
+        "idle_s": null
+      },
+      "next": {
+        "action": "delete",
+        "reason": "24h",
+        "at": "2026-11-23T17:40:00Z",
+        "in_s": 81500,
+        "job_lost": true
+      },
       "cost_estimate_rub": 13.0
     },
     {
-      "id": "00000000-0000-4000-8000-000000000002", "name": "sel-ci-demo2", "role": "runner",
-      "status": "ACTIVE", "drain": false,
-      "flavor": "SL1.8-16384-128", "vcpus": 8, "ram_mb": 16384, "disk_gb": 128,
-      "image": "ci-runner-demo-image", "trial_label": null,
+      "id": "00000000-0000-4000-8000-000000000002",
+      "name": "sel-ci-demo2",
+      "role": "runner",
+      "status": "ACTIVE",
+      "drain": false,
+      "flavor": "SL1.8-16384-128",
+      "vcpus": 8,
+      "ram_mb": 16384,
+      "disk_gb": 128,
+      "image": "ci-runner-demo-image",
+      "trial_label": null,
       "created": "2026-11-22T18:53:00Z",
-      "runner": {"name": "sel-ci-demo2-1", "online": true, "busy": false, "idle_since": "2026-11-22T18:55:00Z"},
-      "next": {"action": "delete", "reason": "idle", "at": "2026-11-22T19:10:00Z"},
+      "age_s": 520,
+      "runner": {
+        "name": "sel-ci-demo2-1",
+        "seq": 1,
+        "online": true,
+        "busy": false,
+        "idle_since": "2026-11-22T18:47:40Z",
+        "idle_s": 840
+      },
+      "next": {
+        "action": "delete",
+        "reason": "idle",
+        "at": "2026-11-22T18:57:40Z",
+        "in_s": -240,
+        "job_lost": false
+      },
       "cost_estimate_rub": 4.0
     },
     {
-      "id": "00000000-0000-4000-8000-000000000003", "name": "sel-img-demo", "role": "image-builder",
-      "status": "ACTIVE", "drain": false,
-      "flavor": "SL1.8-16384-128", "vcpus": 8, "ram_mb": 16384, "disk_gb": 128,
-      "image": "ci-runner-base-demo", "trial_label": "trial-1",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "name": "sel-img-demo",
+      "role": "image-builder",
+      "status": "ACTIVE",
+      "drain": false,
+      "flavor": "SL1.8-16384-128",
+      "vcpus": 8,
+      "ram_mb": 16384,
+      "disk_gb": 128,
+      "image": "ci-runner-base-demo",
+      "trial_label": "trial-1",
       "created": "2026-11-22T18:30:00Z",
+      "age_s": 1900,
       "runner": null,
-      "next": null,
+      "next": {
+        "action": "delete",
+        "reason": "builder-max-age",
+        "at": "2026-11-22T21:30:00Z",
+        "in_s": 5300,
+        "job_lost": false
+      },
       "cost_estimate_rub": 36.0
+    }
+  ],
+  "cost_total_rub": 53.0,
+  "volumes": [
+    {
+      "id": "00000000-0000-4000-8000-0000000000b1",
+      "name": "sel-img-demo",
+      "status": "in-use",
+      "size_gb": 40,
+      "created": "2026-11-22T18:30:00Z",
+      "age_s": 1900,
+      "attached_to": [
+        "00000000-0000-4000-8000-000000000003"
+      ],
+      "verdict": "ok",
+      "note": null
+    }
+  ],
+  "images": [
+    {
+      "id": "00000000-0000-4000-8000-0000000000a0",
+      "name": "ci-runner-demo-image-old",
+      "status": "active",
+      "size_bytes": 2100000000,
+      "created": "2026-11-21T18:00:00Z",
+      "age_s": 90100
     }
   ]
 }

@@ -1,5 +1,6 @@
 //! The Runners view model the mod draws, built from `ci-runners status --json --offline`: the tiles, one row per server
-//! and the line Home shows. It only turns the service's fields into words and minutes, so it moves once a minute.
+//! and the line Home shows. It only turns the service's fields into words and minutes; durations are the service's own,
+//! counted at its `generated_at`.
 
 use std::path::Path;
 
@@ -53,12 +54,22 @@ fn unusable(state: &str, error: String, line: &str) -> Value {
     json!({"state": state, "error": error, "line": {"text": line, "tone": "warning"}, "badge": {"count": "!", "tone": "warning"}})
 }
 
-fn phase(server: &Value) -> &'static str {
+fn secs(v: &Value) -> Option<f64> {
+    v.as_f64().map(|s| s.max(0.0))
+}
+
+/// What the server is doing: `unowned` is a server of ours the tick leaves alone, `unknown` a runner whose GitHub
+/// runners were not listed.
+fn phase(server: &Value, runners_known: bool) -> &'static str {
     let runner = &server["runner"];
-    if server["drain"] == true {
+    if server["role"].is_null() {
+        "unowned"
+    } else if server["drain"] == true {
         "draining"
     } else if text(&server["role"]) == "image-builder" {
         "building"
+    } else if runner.is_null() && !runners_known {
+        "unknown"
     } else if runner["busy"] == true {
         "busy"
     } else if runner["online"] == true {
@@ -77,28 +88,42 @@ fn size(server: &Value) -> Value {
     }
 }
 
-fn next(next: &Value, minute: DateTime<Utc>) -> Value {
+/// The tick's next step for a server in words. `in_s` below zero is a deadline already passed, a minute or more of it
+/// reads as overdue; `job_lost` is the service's word that the step would cut a running job.
+fn next(next: &Value, generated: DateTime<Utc>) -> Value {
     let Some(at) = time(&next["at"]) else { return Value::Null };
+    let in_s = next["in_s"].as_f64().unwrap_or_else(|| (at - generated).num_seconds() as f64);
     let (action, reason) = (text(&next["action"]), text(&next["reason"]));
-    let when = if at <= minute { "now".to_string() } else { format!("in {}", span((at - minute).num_seconds() as f64)) };
-    json!({"text": format!("{action} {when} · {reason}"), "at": next["at"]})
+    let overdue = in_s <= -60.0;
+    let when = if overdue {
+        format!("overdue {}", span(-in_s))
+    } else if in_s <= 0.0 {
+        "now".to_string()
+    } else {
+        format!("in {}", span(in_s))
+    };
+    let mut words = format!("{action} {when} · {reason}");
+    if next["job_lost"] == true {
+        words.push_str(" · job lost");
+    }
+    json!({"text": words, "at": next["at"], "overdue": overdue, "job_lost": next["job_lost"]})
 }
 
-fn server(s: &Value, warned: bool, minute: DateTime<Utc>) -> Value {
+fn server(s: &Value, warned: bool, runners_known: bool, generated: DateTime<Utc>) -> Value {
     let runner = &s["runner"];
     let runner_row = if runner.is_null() {
         Value::Null
     } else {
-        let idle = if runner["busy"] == true { None } else { since(&runner["idle_since"], minute).map(span) };
+        let idle = if runner["busy"] == true { None } else { secs(&runner["idle_s"]).map(span) };
         json!({"name": runner["name"], "online": runner["online"] == true, "busy": runner["busy"] == true, "idle": idle})
     };
     json!({
         "id": s["id"], "name": s["name"], "role": s["role"], "status": s["status"], "drain": s["drain"] == true,
-        "phase": phase(s),
-        "age": since(&s["created"], minute).map(span),
+        "phase": phase(s, runners_known),
+        "age": secs(&s["age_s"]).map(span),
         "flavor": s["flavor"], "size": size(s), "image": s["image"], "trial_label": s["trial_label"],
         "runner": runner_row,
-        "next": next(&s["next"], minute),
+        "next": next(&s["next"], generated),
         "cost": s["cost_estimate_rub"].as_f64().map(rubles),
         "warned": warned,
     })
@@ -121,8 +146,8 @@ fn build(source: Source, watched: &Path, now: DateTime<Utc>) -> Value {
             return unusable("down", why, "ci-runners status is not understood");
         }
     }
-    // The rows' times count from the start of the minute, so they all turn at once and the view moves once a minute.
-    let minute = DateTime::from_timestamp(now.timestamp() - now.timestamp().rem_euclid(60), 0).unwrap_or(now);
+    // Every time counts from the moment the service built its answer, as its own durations do.
+    let generated = time(&status["generated_at"]).unwrap_or(now);
 
     let mut warnings = status["warnings"].as_array().cloned().unwrap_or_default();
     for w in &mut warnings {
@@ -141,22 +166,24 @@ fn build(source: Source, watched: &Path, now: DateTime<Utc>) -> Value {
     let never_ran = time(&tick["last_at"]).is_none();
     let stale = warnings.iter().any(|w| text(&w["kind"]) == "tick-stale");
     let tick_row = json!({
-        "ago": since(&tick["last_at"], minute).map(span), "ok": tick["ok"] == true, "errors": tick["errors"].as_u64().unwrap_or(0), "stale": stale,
+        "ago": since(&tick["last_at"], generated).map(span), "ok": tick["ok"] == true, "errors": tick["errors"].as_u64().unwrap_or(0), "stale": stale,
+        "error_text": tick["error_text"].as_str().filter(|t| !t.is_empty()),
     });
 
     let raw = status["servers"].as_array().cloned().unwrap_or_default();
     let warned = |id: &Value| warnings.iter().any(|w| !w["object"].is_null() && w["object"] == *id);
-    let servers: Vec<Value> = raw.iter().map(|s| server(s, warned(&s["id"]), minute)).collect();
+    let runners_known = status["sources"]["runners"]["ok"] != false;
+    let servers: Vec<Value> = raw.iter().map(|s| server(s, warned(&s["id"]), runners_known, generated)).collect();
 
     let busy = servers.iter().filter(|s| s["runner"]["busy"] == true).count();
     let runners = raw.iter().filter(|s| text(&s["role"]) == "runner").count();
     let queue = &status["queue"];
     let queued = queue["queued_runs"].as_u64();
-    let cost = raw.iter().map(|s| s["cost_estimate_rub"].as_f64()).sum::<Option<f64>>().map(rubles);
+    let cost = status["cost_total_rub"].as_f64().map(rubles);
     let queue_stale = queued.is_some() && queue["stale"] == true;
     let tiles = json!({
         "servers": servers.len(), "runners": runners, "busy": busy, "queued": queued,
-        "queue_ago": queued.and_then(|_| since(&queue["at"], minute)).map(span), "queue_stale": queue_stale, "cost": cost,
+        "queue_ago": queued.and_then(|_| since(&queue["at"], generated)).map(span), "queue_stale": queue_stale, "cost": cost,
     });
 
     let mut line = match servers.len() {
@@ -230,6 +257,46 @@ mod tests {
         let m = live(status);
         let phases: Vec<&str> = m["servers"].as_array().unwrap().iter().map(|s| s["phase"].as_str().unwrap()).collect();
         assert_eq!(phases, ["draining", "building", "busy", "idle", "booting"]);
+    }
+
+    #[test]
+    fn a_server_without_a_role_is_not_the_tick_s_and_unlisted_runners_are_unknown() {
+        let mut status = fixture();
+        status["servers"] = json!([
+            {"id": "x", "name": "acme-scratch", "role": null, "status": "ACTIVE", "drain": false, "runner": null},
+            small(false, "runner", "ACTIVE", Value::Null),
+        ]);
+        let phases = |m: Value| m["servers"].as_array().unwrap().iter().map(|s| s["phase"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+        assert_eq!(phases(live(status.clone())), ["unowned", "booting"]);
+        status["sources"]["runners"]["ok"] = json!(false);
+        assert_eq!(phases(live(status)), ["unowned", "unknown"]);
+    }
+
+    #[test]
+    fn the_next_step_reads_ahead_now_or_overdue() {
+        let words = |in_s: i64, job_lost: Value| {
+            let mut status = fixture();
+            status["servers"][1]["next"] = json!({"action": "delete", "reason": "idle", "at": "2026-11-22T19:00:00Z", "in_s": in_s, "job_lost": job_lost});
+            let next = live(status)["servers"][1]["next"].clone();
+            (next["text"].as_str().unwrap().to_string(), next["overdue"] == true)
+        };
+        assert_eq!(words(600, json!(false)), ("delete in 10m · idle".into(), false));
+        assert_eq!(words(0, json!(false)), ("delete now · idle".into(), false));
+        assert_eq!(words(-59, Value::Null), ("delete now · idle".into(), false));
+        assert_eq!(words(-240, json!(false)), ("delete overdue 4m · idle".into(), true));
+        assert_eq!(words(81500, json!(true)), ("delete in 22h 38m · idle · job lost".into(), false));
+    }
+
+    #[test]
+    fn a_failed_tick_carries_its_error_text() {
+        let mut status = fixture();
+        status["tick"]["ok"] = json!(false);
+        status["tick"]["errors"] = json!(1);
+        status["tick"]["error_text"] = json!("volumes not listed: storage answered 503");
+        let tick = live(status)["tick"].clone();
+        assert_eq!((tick["ok"].clone(), tick["errors"].clone()), (json!(false), json!(1)));
+        assert_eq!(tick["error_text"], "volumes not listed: storage answered 503");
+        assert_eq!(live(fixture())["tick"]["error_text"], Value::Null);
     }
 
     #[test]
@@ -310,8 +377,8 @@ mod tests {
     #[test]
     fn a_warning_without_text_reads_as_its_kind() {
         let mut status = fixture();
-        status["warnings"] = json!([{"kind": "idle-long", "object": null}]);
-        assert_eq!(live(status)["warnings"][0]["text"], "idle-long");
+        status["warnings"] = json!([{"kind": "a-new-kind", "object": null}]);
+        assert_eq!(live(status)["warnings"][0]["text"], "a-new-kind");
     }
 
     #[test]
@@ -337,25 +404,30 @@ mod tests {
     }
 
     #[test]
-    fn cost_sums_only_when_every_server_has_one() {
+    fn the_cost_tile_is_the_service_s_total() {
         assert_eq!(live(fixture())["tiles"]["cost"], "≈ 53 ₽");
         let mut status = fixture();
-        status["servers"][1]["cost_estimate_rub"] = Value::Null;
+        status["cost_total_rub"] = json!(60.4);
+        assert_eq!(live(status.clone())["tiles"]["cost"], "≈ 60 ₽");
+        status["cost_total_rub"] = Value::Null;
         assert_eq!(live(status)["tiles"]["cost"], Value::Null);
     }
 
     #[test]
-    fn times_move_once_a_minute() {
+    fn times_count_from_the_service_s_answer_not_cockpit_s_clock() {
         let a = model(Source::Live(fixture()), Path::new(WATCHED), at("2026-11-22T19:01:05Z"));
-        let b = model(Source::Live(fixture()), Path::new(WATCHED), at("2026-11-22T19:01:25Z"));
+        let b = model(Source::Live(fixture()), Path::new(WATCHED), at("2026-11-23T09:00:00Z"));
         assert_eq!(a, b);
+        let mut status = fixture();
+        status["generated_at"] = Value::Null;
+        assert_eq!(model(Source::Live(status), Path::new(WATCHED), at("2026-11-22T19:05:13Z"))["tick"]["ago"], "4m");
     }
 
     #[test]
     fn a_different_state_dir_warns() {
         let m = model(Source::Live(fixture()), Path::new("/elsewhere"), now());
         let kinds: Vec<&str> = m["warnings"].as_array().unwrap().iter().map(|w| w["kind"].as_str().unwrap()).collect();
-        assert_eq!(kinds, ["idle-long", "state-dir"]);
+        assert_eq!(kinds, ["reap-overdue", "state-dir"]);
         assert_eq!(m["badge"]["count"], 2);
     }
 }

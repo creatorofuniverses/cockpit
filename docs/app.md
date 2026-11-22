@@ -1608,30 +1608,34 @@ without it.
   "error": "…" | null,                       // down / outdated / newer: why, for a person
   "line":  {"text": "2 servers · 1 busy · 3 queued", "tone": "warning" | null} | null,   // null only when absent
   "badge": {"count": 2 | "!", "tone": "warning"} | null,
-  "tick":  {"ago": "1m", "ok": true, "errors": 0, "stale": false} | null,
+  "tick":  {"ago": "1m", "ok": true, "errors": 0, "stale": false, "error_text": "…" | null} | null,
   "warnings": [{"kind": "tick-stale", "text": "no successful tick for > 5 min", "object": null}],
   "tiles": {"servers": 3, "runners": 2, "busy": 1, "queued": 3 | null, "queue_ago": "4m" | null, "queue_stale": false, "cost": "≈ 53 ₽" | null},
   "servers": [{
-    "id": "…", "name": "sel-ci-demo2", "role": "runner" | "image-builder", "status": "ACTIVE", "drain": false,
-    "phase": "busy" | "idle" | "booting" | "draining" | "building" | "other",
+    "id": "…", "name": "sel-ci-demo2", "role": "runner" | "image-builder" | null, "status": "ACTIVE", "drain": false,
+    "phase": "busy" | "idle" | "booting" | "draining" | "building" | "unowned" | "unknown" | "other",
     "age": "8m", "flavor": "SL1.8-16384-128", "size": "8 vCPU · 16 GiB · 128 GB", "image": "…", "trial_label": null,
     "runner": {"name": "sel-ci-demo2-1", "online": true, "busy": false, "idle": "6m" | null} | null,
-    "next": {"text": "delete in 9m · idle", "at": "…"} | null,
+    "next": {"text": "delete overdue 4m · idle", "at": "…", "overdue": true, "job_lost": false | true | null} | null,
     "cost": "≈ 4 ₽" | null,
     "warned": false                            // some warning's object is this server's id
   }]
 }
 ```
 
-The phase follows the service's fields: `drain` is `draining`, the `image-builder` role is `building`, a `busy` runner is
-`busy`, an `online` one `idle`, and an `ACTIVE` server with no online runner is `booting`. The line reads
+The phase follows the service's fields: a server with a `null` role is `unowned` (ours, but the tick leaves it alone),
+`drain` is `draining`, the `image-builder` role is `building`, a server without a runner while `sources.runners.ok` is false
+is `unknown`, a `busy` runner is `busy`, an `online` one `idle`, and an `ACTIVE` server with no online runner is `booting`. The line reads
 `N servers · B busy`, plus `· Q queued` when the queue is polled, and turns yellow while `warnings` is not empty; the
 other states read `update ci-runners`, `update cockpit`, `tick has not run`, `ci-runners does not answer` and, for a `v: 1`
 reply without a `servers` array or a `tick` object (state `down`, error "ci-runners status lacks servers; cockpit and
 ci-runners disagree on the format"), `ci-runners status is not understood`. `no-tick` means `tick.last_at` is null or missing:
 a tick uninstalled after it ran stays `live`, and the service's own warnings say what is wrong. A warning without `text`
-shows its `kind`. Times are counted from the start of the current minute, so the model moves once a minute. Costs are the service's estimates, shown
-as `≈ N ₽`, and the tile total is `null` when any server lacks one. When the service's `state_dir` is not the folder the
+shows its `kind`. Ages, idle times and deadlines are the service's own `age_s`, `idle_s` and `next.in_s`, and the tick's and
+queue's ages count from its `generated_at`, so the model does not depend on cockpit's clock. A deadline a minute or more in
+the past reads `overdue` and the row turns to the warning tone; `job_lost` adds `· job lost`. A tick that ended with
+errors adds them to the header badge and shows `tick.error_text` under the warnings. Costs are the service's estimates,
+shown as `≈ N ₽`; the tile is its `cost_total_rub`. When the service's `state_dir` is not the folder the
 hub watches, a `state-dir` warning says the view updates every 20 seconds. `queue_ago` is the age of the queue count and is present whenever the queue is polled; `queue_stale` is the service's `queue.stale` flag
 (missing reads false): the last queue poll failed and the count is the last good one. The screen marks it in the warning tone.
 

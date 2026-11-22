@@ -52,15 +52,22 @@ export function phaseWords(server) {
       return "draining";
     case "building":
       return "building image";
+    case "unowned":
+      return "not managed by tick";
+    case "unknown":
+      return "runner unknown";
     default:
       return "other";
   }
 }
 
-/** The header's tick label, or null when the tick has no last run to count from. */
+/** The header's tick label with how the last run ended, or null when the tick has no last run to count from. */
 export function tickText(model) {
-  const ago = model?.tick?.ago;
-  return ago ? `tick ${ago} ago` : null;
+  const tick = model?.tick;
+  if (!tick?.ago) return null;
+  if (tick.ok !== false) return `tick ${tick.ago} ago`;
+  const errors = tick.errors > 0 ? `${tick.errors} ${tick.errors === 1 ? "error" : "errors"}` : "failed";
+  return `tick ${tick.ago} ago · ${errors}`;
 }
 
 /** A server's cost with the word that marks it as an estimate. */
@@ -198,7 +205,13 @@ export default class Runners {
               .child(div().text_size(TEXT.xs).text_color(k.mutedFg).child(s.role))
               .child(div().text_size(TEXT.xs).text_color(k.mutedFg).child(statusWords(s))),
           )
-          .child(div().truncate().text_size(TEXT.xs).text_color(k.mutedFg).child([phaseWords(s), s.age, s.next?.text].filter(Boolean).join(" · "))),
+          .child(
+            div()
+              .truncate()
+              .text_size(TEXT.xs)
+              .text_color(s.next?.overdue ? k.warning : k.mutedFg)
+              .child([phaseWords(s), s.age, s.next?.text].filter(Boolean).join(" · ")),
+          ),
       )
       .when(this.width >= 760 && Boolean(s.cost), (e) => e.child(div().flex_none().text_size(TEXT.xs).text_color(k.mutedFg).child(costWords(s.cost))));
   }
@@ -263,6 +276,7 @@ export default class Runners {
     const m = this.model;
     const stale = Boolean(m.tick?.stale);
     const asOf = stale && m.tick.ago ? `as of ${m.tick.ago} ago` : null;
+    const failed = m.tick?.error_text ? `last tick: ${m.tick.error_text}` : null;
     return h_flex()
       .flex_1()
       .min_h(0)
@@ -281,6 +295,7 @@ export default class Runners {
               .flex_none()
               .child(this.warnings(k) ?? div())
               .when(Boolean(asOf), (e) => e.child(div().text_size(TEXT.xs).text_color(k.warning).child(asOf)))
+              .when(Boolean(failed), (e) => e.child(div().text_size(TEXT.xs).text_color(k.warning).whitespace_normal().child(failed)))
               .child(v_flex().when(stale, (e) => e.opacity(0.5)).child(this.tiles())),
           )
           .child(v_flex().flex_1().min_h(0).px(20).when(stale, (e) => e.opacity(0.5)).child(this.list(k)))
@@ -338,7 +353,7 @@ export default class Runners {
           icon: "server",
           title: "Runners",
           description,
-          actions: tickText(m) ? [Badge(tickText(m), tick.stale ? "warning" : "outline", { icon: "clock" })] : [],
+          actions: tickText(m) ? [Badge(tickText(m), tick.stale || tick.ok === false ? "warning" : "outline", { icon: "clock" })] : [],
         }),
       )
       .child(this.body(k))
