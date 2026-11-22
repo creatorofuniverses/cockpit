@@ -481,6 +481,7 @@ dependencies = [
  "cockpit-review",
  "cockpit-routines",
  "cockpit-runbook",
+ "cockpit-runners",
  "cockpit-show",
  "cockpit-todo",
  "cockpit-update",
