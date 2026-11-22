@@ -82,9 +82,9 @@ export const sleep = (cx, ms) => new Promise((resolve) => cx.timer.after(ms, () 
 const NOT_INSTALLED = "cockpit is not installed in this Herdr home";
 const READ_ONLY = "the remote cockpit client is read-only; this action needs a local cockpit installation";
 const REMOTE_READS = new Set(["ping", "view", "search", "fetch", "events", "history", "shown"]);
-const APPS = new Set(["inbox", "todo", "runbook", "meetings", "mail", "monitor", "routines", "aq", "show"]);
+const APPS = new Set(["inbox", "todo", "runbook", "meetings", "mail", "monitor", "routines", "aq", "runners", "show"]);
 /** The app behind a pinned space's name, as `cockpit focus space:<name>` gives it. */
-const SPACES = { inbox: "inbox", runbook: "runbook", "to-do": "todo", todo: "todo", meetings: "meetings", monitor: "monitor", routines: "routines", mail: "mail", aq: "aq" };
+const SPACES = { inbox: "inbox", runbook: "runbook", "to-do": "todo", todo: "todo", meetings: "meetings", monitor: "monitor", routines: "routines", mail: "mail", aq: "aq", runners: "runners" };
 
 /** Brings an app into view on this desktop, without a row to select. */
 function localShow(app) {

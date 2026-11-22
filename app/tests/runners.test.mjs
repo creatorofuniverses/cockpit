@@ -43,7 +43,7 @@ async function fixture() {
     modules.set(name, module);
     return module;
   }
-  const module = new SourceTextModule('export * from "./runners.js"; export { default as Runners } from "./runners.js";', { context });
+  const module = new SourceTextModule('export * from "./runners.js"; export { default as Runners } from "./runners.js"; export { autoApps } from "./sidebar.js";', { context });
   await module.link(load);
   await module.evaluate();
   return { runners: module.namespace, calls, acts };
@@ -116,4 +116,23 @@ test("every cost on a server is marked as an estimate", async () => {
   const f = await fixture();
   assert.equal(f.runners.costWords("≈ 13 ₽"), "≈ 13 ₽ estimate");
   assert.equal(f.runners.costWords(null), null);
+});
+
+test("the sidebar shows Runners only when the hub finds ci-runners", async () => {
+  const f = await fixture();
+  const spaces = ["inbox", "todo"];
+  assert.deepEqual(plain(f.runners.autoApps(spaces, { runners: "absent" })), ["inbox", "todo"]);
+  assert.deepEqual(plain(f.runners.autoApps(spaces, {})), ["inbox", "todo"]);
+  assert.deepEqual(plain(f.runners.autoApps(spaces, { runners: "live" })), ["inbox", "todo", "runners"]);
+  assert.deepEqual(plain(f.runners.autoApps(spaces, { aq: "live", runners: "down" })), ["inbox", "todo", "aq", "runners"]);
+  assert.deepEqual(plain(f.runners.autoApps(["runners"], { runners: "live" })), ["runners"]);
+});
+
+test("cmd-alt-9 opens Runners in the cockpit layout", async () => {
+  const keys = JSON.parse(await readFile(new URL("../keys.json", import.meta.url), "utf8"));
+  assert.equal(keys["layout:cockpit"]["cmd-alt-9"], "cockpit.go:runners");
+  for (const layout of ["cockpit", "cockpit-chat"]) {
+    const l = await readFile(new URL(`../layouts/${layout}.json`, import.meta.url), "utf8");
+    assert.match(l, /"app":\s*"runners"/, `${layout} has a runners block`);
+  }
 });

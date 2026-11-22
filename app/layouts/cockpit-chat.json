@@ -381,6 +381,16 @@
                   "app": "aq"
                 }
               }
+            },
+            {
+              "id": "runners",
+              "type": "block",
+              "content": {
+                "mod": "cockpit",
+                "props": {
+                  "app": "runners"
+                }
+              }
             }
           ]
         }

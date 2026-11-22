@@ -66,6 +66,7 @@ const OVERVIEW = [
     open: (v) => (v.look?.length ? hub.go({ app: "routines", key: v.look[0].key }).catch(() => {}) : show("routines")),
   },
   { view: "aq", space: "aq", label: "aq", icon: "cpu", line: (v) => v.line ?? null },
+  { view: "runners", space: "runners", label: "Runners", icon: "server", line: (v) => v.line ?? null },
 ];
 
 const COLUMNS = [
@@ -913,7 +914,7 @@ export default class Home {
     // Meetings have their own card above, unless the calendar fails to read.
     // Mail shows wherever it is set up, pinned or not.
     const calendarFails = Boolean(failing(this.apps.meetings?.sources, Date.now()));
-    const items = OVERVIEW.filter((o) => (o.view !== "meetings" || calendarFails) && ((this.pinned ?? DEFAULT_PINNED).includes(o.space) || (o.view === "mail" && this.apps.mail?.enabled) || o.view === "aq"))
+    const items = OVERVIEW.filter((o) => (o.view !== "meetings" || calendarFails) && ((this.pinned ?? DEFAULT_PINNED).includes(o.space) || (o.view === "mail" && this.apps.mail?.enabled) || o.view === "aq" || o.view === "runners"))
       // The app's own line first; a failing source under it, as its numbers may be old.
       .map((o) => ({ ...o, line: this.apps[o.view] ? o.line(this.apps[o.view]) : null, source: this.apps[o.view] ? sourceLine(o, this.apps[o.view]) : null }))
       .filter((o) => o.line || o.source);

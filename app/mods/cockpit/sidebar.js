@@ -28,7 +28,17 @@ export const APPS = {
   routines: { label: "Routines", icon: "clock" },
   mail: { label: "Mail", icon: "mail" },
   aq: { label: "aq", icon: "cpu" },
+  runners: { label: "Runners", icon: "server" },
 };
+
+/** The apps whose icon shows wherever the hub finds their tool on its machine, with no place in the config's spaces. */
+const AUTO_APPS = ["aq", "runners"];
+
+/** The config's spaces plus the auto-shown apps whose view state is neither absent nor missing. */
+export function autoApps(spaces, states) {
+  const found = AUTO_APPS.filter((app) => states[app] && states[app] !== "absent" && !spaces.includes(app));
+  return found.length ? [...spaces, ...found] : spaces;
+}
 const DEFAULT_SPACES = ["inbox", "terminal", "actions", "to-do", "runbook", "meetings"];
 
 /** The fields of each app's view that appBadge reads (and aq's state): the hub sends these alone, when they move. */
@@ -40,6 +50,7 @@ const BADGE_FIELDS = {
   meetings: ["meetings", "today", "banner"],
   mail: ["counts"],
   aq: ["badge", "state"],
+  runners: ["badge", "state"],
 };
 
 /** An app's bubble from its view: what waits on you there, {count, tone} or null. */
@@ -54,7 +65,7 @@ function appBadge(app, v) {
   }
   if (app === "routines") return of(v.tiles?.unread, v.tiles?.failing ? "destructive" : "warning");
   if (app === "mail") return of(v.counts?.needs, "warning");
-  if (app === "aq") return v.badge ? { count: v.badge.count, tone: v.badge.tone } : null;
+  if (app === "aq" || app === "runners") return v.badge ? { count: v.badge.count, tone: v.badge.tone } : null;
   if (app === "meetings") {
     const now = Date.now();
     const left = (v.meetings ?? []).filter((m) => m.day === v.today && (m.end ?? 0) > now).length;
@@ -86,6 +97,7 @@ export default class Sidebar {
   init(_props, cx) {
     this.spaces = DEFAULT_SPACES;
     this.counts = {};
+    this.found = {};
     this.place = null;
     this.width = 268;
     this.hover = new Hover();
@@ -127,8 +139,7 @@ export default class Sidebar {
     const views = Object.entries(BADGE_FIELDS).map(([name, pick]) => ({ name, pick }));
     this.sub = hub.subscribe(cx, { views, notify: true, window: true }, (m, cx) => {
       if (m.view) this.counts[m.view] = appBadge(m.view, m.value);
-      // aq has no place in the config's spaces: its icon shows wherever the hub finds aq on its machine.
-      if (m.view === "aq") this.aq = m.value?.state && m.value.state !== "absent";
+      if (AUTO_APPS.includes(m.view)) this.found[m.view] = m.value?.state;
       if (m.notify) this.toast(m.notify, cx);
       cx.notify();
     });
@@ -245,7 +256,7 @@ export default class Sidebar {
         )
         .when(Boolean(count) && rail, (e) => e.child(div().absolute().top(4).right(6).size(7).rounded(4).bg(tone ?? k.ring)));
     };
-    const pinned = this.aq && !this.spaces.includes("aq") ? [...this.spaces, "aq"] : this.spaces;
+    const pinned = autoApps(this.spaces, this.found);
     const apps = pinned.filter((s) => APPS[s]).map((s) => ({ ...APPS[s], child: APPS[s].child ?? s, command: `cockpit.go:${APPS[s].child ?? s}` }));
     const badge = (child) => this.counts[child] ?? shared(`badge.${child}`) ?? null;
     const tone = (child) => { const t = badge(child)?.tone; return t ? k[t] ?? t : null; };
