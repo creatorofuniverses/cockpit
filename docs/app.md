@@ -182,7 +182,7 @@ Desktop checks: `node --experimental-vm-modules --test app/tests/*.test.mjs`.
 
 - Keys (`app/keys.json`, sections `layout:cockpit` and `layout:cockpit-chat`): `cmd-shift-p` → `cockpit.palette`
   (cockpit's palette, a superset of Herdr's), `cmd-/` → `cockpit.keys` (the keys sheet), `cmd-alt-1..7` →
-  `cockpit.go:<inbox|runbook|todo|meetings|monitor|routines|mail>`, and in Cockpit `cmd-alt-8` → `cockpit.go:aq`. A `cockpit.<command>` reaches every shown copy's
+  `cockpit.go:<inbox|runbook|todo|meetings|monitor|routines|mail>`, and in Cockpit `cmd-alt-8` → `cockpit.go:aq`, `cmd-alt-9` → `cockpit.go:runners`. A `cockpit.<command>` reaches every shown copy's
   `command()` (a hidden one, such as a sidebar ⌘B closed or a screen behind another, hears nothing); prefix your own
   with your view's name (`todo:delete:<key>`).
 - The window's commands live in `commands.js` and run in the one copy each layout always shows, its *runner*
@@ -1589,6 +1589,51 @@ GiB (MiB below one) and times to the minute, so the model moves only when someth
 default) and `release`, run as the aq commands of those names; ids must be aq's hex-and-dash ids. A remote desk reads the
 runner's queue and logs; the buttons that change it show only on the machine aq runs on. An item goes to its agent by
 its `session`, matched against the `agents` view's rows.
+
+## View `runners` (the Runners space, app only)
+
+The Runners space shows the CI runner servers that the `ci-runners` service keeps. `cockpit_runners::gui` asks
+`ci-runners version --json` first and calls `ci-runners status --json --offline` only when its `features` list
+`status-offline`, each with a 5 second limit. It rebuilds when `~/.local/state/ci-runners` changes and every 20 seconds.
+It makes no network calls and calls nothing that is not in `features`; an older service reads as `outdated`, and a
+`status` reply with a `v` it does not know reads as `newer`. Cockpit adds no thresholds of its own: problems come only
+from the service's `warnings` (a stopped tick is the `tick-stale` warning), and the view is read-only, with no actions.
+The space has no TUI half and no place in the config's `spaces`: its sidebar icon and Home line show wherever the hub
+finds ci-runners (`CI_RUNNERS_BIN`, then `PATH`, then `~/.local/bin/ci-runners`), and nothing is created on a machine
+without it.
+
+```jsonc
+{
+  "state": "absent" | "outdated" | "newer" | "no-tick" | "down" | "live",
+  "error": "…" | null,                       // down / outdated / newer: why, for a person
+  "line":  {"text": "2 servers · 1 busy · 3 queued", "tone": "warning" | null} | null,   // null only when absent
+  "badge": {"count": 2 | "!", "tone": "warning"} | null,
+  "tick":  {"ago": "1m", "ok": true, "errors": 0, "stale": false} | null,
+  "warnings": [{"kind": "tick-stale", "text": "no successful tick for > 5 min", "object": null}],
+  "tiles": {"servers": 3, "runners": 2, "busy": 1, "queued": 3 | null, "queue_ago": "4m" | null, "cost": "≈ 53 ₽" | null},
+  "servers": [{
+    "id": "…", "name": "sel-ci-demo2", "role": "runner" | "image-builder", "status": "ACTIVE", "drain": false,
+    "phase": "busy" | "idle" | "booting" | "draining" | "building" | "other",
+    "age": "8m", "flavor": "SL1.8-16384-128", "size": "8 vCPU · 16 GiB · 128 GB", "image": "…", "trial_label": null,
+    "runner": {"name": "sel-ci-demo2-1", "online": true, "busy": false, "idle": "6m" | null} | null,
+    "next": {"text": "delete in 9m · idle", "at": "…"} | null,
+    "cost": "≈ 4 ₽" | null,
+    "warned": false                            // some warning's object is this server's id
+  }]
+}
+```
+
+The phase follows the service's fields: `drain` is `draining`, the `image-builder` role is `building`, a `busy` runner is
+`busy`, an `online` one `idle`, and an `ACTIVE` server with no online runner is `booting`. The line reads
+`N servers · B busy`, plus `· Q queued` when the queue is polled, and turns yellow while `warnings` is not empty; the
+other states read `update ci-runners`, `update cockpit`, `tick has not run` and `ci-runners does not answer`. Times are
+counted from the start of the current minute, so the model moves once a minute. Costs are the service's estimates, shown
+as `≈ N ₽`, and the tile total is `null` when any server lacks one. When the service's `state_dir` is not the folder the
+hub watches, a `state-dir` warning says the view updates every 20 seconds. A stale queue value carries `queue_ago`.
+
+For the sandbox, `scripts/fake-ci-runners.sh` answers `version --json` and `status --json --offline` from the crate's
+fixtures (`CI_RUNNERS_FAKE=stale` serves the one with a stale tick):
+`CI_RUNNERS_BIN=$PWD/scripts/fake-ci-runners.sh COCKPIT_SANDBOX=/tmp/cc-r sh scripts/sandbox.sh start`.
 
 ## Views `routines` and `routines-when` (the routines space, both halves)
 
