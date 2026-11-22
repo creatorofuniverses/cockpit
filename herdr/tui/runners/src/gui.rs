@@ -23,7 +23,11 @@ pub fn state_dir() -> PathBuf {
 /// The folders the view rebuilds on: ci-runners' state folder, only on a machine that has ci-runners, because the hub
 /// creates what it watches.
 pub fn dirs() -> Vec<PathBuf> {
-    if bin().is_some() { vec![state_dir()] } else { Vec::new() }
+    dirs_for(bin())
+}
+
+fn dirs_for(bin: Option<PathBuf>) -> Vec<PathBuf> {
+    if bin.is_some() { vec![state_dir()] } else { Vec::new() }
 }
 
 /// The ci-runners binary: `CI_RUNNERS_BIN`, else `ci-runners` on the PATH, else `~/.local/bin/ci-runners` (a hub started
@@ -119,6 +123,12 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
     use std::time::{Duration, Instant, SystemTime};
+
+    #[test]
+    fn no_ci_runners_watches_nothing() {
+        assert!(dirs_for(None).is_empty());
+        assert_eq!(dirs_for(Some(PathBuf::from("/x/ci-runners"))), vec![state_dir()]);
+    }
 
     const VERSION: &str = include_str!("../tests/fixtures/version.json");
     const STATUS: &str = include_str!("../tests/fixtures/status-live.json");

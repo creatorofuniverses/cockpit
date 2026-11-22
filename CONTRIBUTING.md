@@ -7,7 +7,7 @@ agree on the shape before you write it.
 
 | Path | What it is |
 | --- | --- |
-| `herdr/tui/` | The Rust workspace behind the one `cockpit` binary: `core` (shared kit, agents table, transcripts), `hub` (the background process every app talks to), the space apps (`agents`, `inbox`, `runbook`, `show`, `todo`, `meetings`, `monitor`, `routines`, `palette`, `aq`), `connectors` (the MCP client the hub calls your servers with, and each source's mapping), `update` (self-update) and `cli` (the binary and its subcommands, the MCP server). |
+| `herdr/tui/` | The Rust workspace behind the one `cockpit` binary: `core` (shared kit, agents table, transcripts), `hub` (the background process every app talks to), the space apps (`agents`, `inbox`, `runbook`, `show`, `todo`, `meetings`, `monitor`, `routines`, `palette`, `aq`, `runners`), `connectors` (the MCP client the hub calls your servers with, and each source's mapping), `update` (self-update) and `cli` (the binary and its subcommands, the MCP server). |
 | `app/` | The Herdr app half: `layouts/`, the `mods/cockpit/` mod (plain ES modules on Herdr's `gpui-kit`), `keys.json` and `RECIPE.md`. `docs/app.md` explains how it fits together. |
 | `browser/` | The Chromium side browser: an Electron shell in plain ES modules (`main/`), its toolbar (`ui/`), the pinned versions it runs on (`pins.json`) and its tests. `docs/browser.md` is its guide. |
 | `plugin/` | The Claude Code plugin: TypeScript hooks in `hooks/`, commands, the side-browser skill, tests in `tests/`. |

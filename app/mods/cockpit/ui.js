@@ -1416,7 +1416,7 @@ export function MiniBars(values, { color, h = 24, gap = 4, lastSolid = true } = 
  * A dashboard number in a card: a small-caps label, the value in its tone, a hint or mini bars under it; `tint` fills
  * the card with a faint wash of the tone (the one number to look at first).
  */
-export function Metric(id, { label, value, tone, tint = false, hint, bars, icon, spin = false, onClick, tooltip } = {}) {
+export function Metric(id, { label, value, tone, tint = false, hint, hintTone, bars, icon, spin = false, onClick, tooltip } = {}) {
   const k = tokens();
   const c = tone ?? k.foreground;
   let el = v_flex()
@@ -1441,7 +1441,7 @@ export function Metric(id, { label, value, tone, tint = false, hint, bars, icon,
     )
     .child(div().min_w(0).truncate().text_size(26).font_semibold().text_color(c).child(String(value ?? "–")))
     .when(Boolean(bars?.length), (e) => e.child(MiniBars(bars, { color: c, h: 22 })))
-    .when(Boolean(hint) && !bars?.length, (e) => e.child(div().truncate().text_size(TEXT.xs).text_color(k.mutedFg).child(hint)));
+    .when(Boolean(hint) && !bars?.length, (e) => e.child(div().truncate().text_size(TEXT.xs).text_color(hintTone ?? k.mutedFg).child(hint)));
   if (onClick) el = el.cursor_pointer().hover((s) => s.border_color(alpha(c, 0.6))).on_click(onClick);
   if (tooltip) el = el.tooltip(tooltip);
   return el;

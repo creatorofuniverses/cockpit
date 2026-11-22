@@ -34,7 +34,7 @@ export function tiles(model) {
     { id: "servers", label: "Servers", value: t.servers, icon: "server" },
     { id: "busy", label: "Busy", value: `${t.busy} / ${t.runners}`, icon: "play", hint: "runners working" },
   ];
-  if (t.queued != null) out.push({ id: "queued", label: "Queued", value: t.queued, icon: "hourglass", hint: t.queue_ago ? `as of ${t.queue_ago} ago` : undefined });
+  if (t.queued != null) out.push({ id: "queued", label: "Queued", value: t.queued, icon: "hourglass", hint: t.queue_ago ? `as of ${t.queue_ago} ago` : undefined, hintWarn: Boolean(t.queue_stale) });
   if (t.cost != null) out.push({ id: "cost", label: "Cost now", value: t.cost, icon: "gauge", hint: "estimate" });
   return out;
 }
@@ -145,7 +145,7 @@ export default class Runners {
   // Drawing
 
   tiles() {
-    return Tiles(tiles(this.model).map((t) => Metric(`runners-tile-${t.id}`, { label: t.label, value: t.value, icon: t.icon, hint: t.hint })));
+    return Tiles(tiles(this.model).map((t) => Metric(`runners-tile-${t.id}`, { label: t.label, value: t.value, icon: t.icon, hint: t.hint, hintTone: t.hintWarn ? tokens().warning : undefined })));
   }
 
   warnings(k) {

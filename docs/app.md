@@ -1604,13 +1604,13 @@ without it.
 
 ```jsonc
 {
-  "state": "absent" | "outdated" | "newer" | "no-tick" | "down" | "live",
+  "state": "absent" | "outdated" | "newer" | "no-tick" | "down" | "live",   // no-tick: tick.last_at is null or missing
   "error": "…" | null,                       // down / outdated / newer: why, for a person
   "line":  {"text": "2 servers · 1 busy · 3 queued", "tone": "warning" | null} | null,   // null only when absent
   "badge": {"count": 2 | "!", "tone": "warning"} | null,
   "tick":  {"ago": "1m", "ok": true, "errors": 0, "stale": false} | null,
   "warnings": [{"kind": "tick-stale", "text": "no successful tick for > 5 min", "object": null}],
-  "tiles": {"servers": 3, "runners": 2, "busy": 1, "queued": 3 | null, "queue_ago": "4m" | null, "cost": "≈ 53 ₽" | null},
+  "tiles": {"servers": 3, "runners": 2, "busy": 1, "queued": 3 | null, "queue_ago": "4m" | null, "queue_stale": false, "cost": "≈ 53 ₽" | null},
   "servers": [{
     "id": "…", "name": "sel-ci-demo2", "role": "runner" | "image-builder", "status": "ACTIVE", "drain": false,
     "phase": "busy" | "idle" | "booting" | "draining" | "building" | "other",
@@ -1626,10 +1626,14 @@ without it.
 The phase follows the service's fields: `drain` is `draining`, the `image-builder` role is `building`, a `busy` runner is
 `busy`, an `online` one `idle`, and an `ACTIVE` server with no online runner is `booting`. The line reads
 `N servers · B busy`, plus `· Q queued` when the queue is polled, and turns yellow while `warnings` is not empty; the
-other states read `update ci-runners`, `update cockpit`, `tick has not run` and `ci-runners does not answer`. Times are
-counted from the start of the current minute, so the model moves once a minute. Costs are the service's estimates, shown
+other states read `update ci-runners`, `update cockpit`, `tick has not run`, `ci-runners does not answer` and, for a `v: 1`
+reply without a `servers` array or a `tick` object (state `down`, error "ci-runners status lacks servers; cockpit and
+ci-runners disagree on the format"), `ci-runners status is not understood`. `no-tick` means `tick.last_at` is null or missing:
+a tick uninstalled after it ran stays `live`, and the service's own warnings say what is wrong. A warning without `text`
+shows its `kind`. Times are counted from the start of the current minute, so the model moves once a minute. Costs are the service's estimates, shown
 as `≈ N ₽`, and the tile total is `null` when any server lacks one. When the service's `state_dir` is not the folder the
-hub watches, a `state-dir` warning says the view updates every 20 seconds. A stale queue value carries `queue_ago`.
+hub watches, a `state-dir` warning says the view updates every 20 seconds. `queue_ago` is the age of the queue count and is present whenever the queue is polled; `queue_stale` is true when
+`queue.at` is earlier than `tick.last_at`, and the screen marks it in the warning tone.
 
 For the sandbox, `scripts/fake-ci-runners.sh` answers `version --json` and `status --json --offline` from the crate's
 fixtures (`CI_RUNNERS_FAKE=stale` serves the one with a stale tick):

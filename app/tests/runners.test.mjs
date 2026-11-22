@@ -97,6 +97,9 @@ test("no queue tile when the service sends none", async () => {
   const m = await model();
   assert.deepEqual(plain(f.runners.tiles(m).map((t) => t.label)), ["Servers", "Busy", "Queued", "Cost now"]);
   assert.equal(plain(f.runners.tiles(m)).find((t) => t.label === "Queued").hint, "as of 4m ago");
+  const queued = (stale) => plain(f.runners.tiles({ ...m, tiles: { ...m.tiles, queue_stale: stale } })).find((t) => t.label === "Queued");
+  assert.equal(queued(true).hintWarn, true);
+  assert.equal(queued(false).hintWarn, false);
   m.tiles.queued = null;
   m.tiles.cost = null;
   assert.deepEqual(plain(f.runners.tiles(m).map((t) => t.label)), ["Servers", "Busy"]);

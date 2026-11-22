@@ -114,19 +114,31 @@ fn build(source: Source, watched: &Path, now: DateTime<Utc>) -> Value {
     if status["v"].as_u64() != Some(JSON_V) {
         return unusable("newer", "ci-runners answers in a newer format than this cockpit reads".into(), "update cockpit");
     }
+    for field in ["servers", "tick"] {
+        let fits = if field == "servers" { status[field].is_array() } else { status[field].is_object() };
+        if !fits {
+            let why = format!("ci-runners status lacks {field}; cockpit and ci-runners disagree on the format");
+            return unusable("down", why, "ci-runners status is not understood");
+        }
+    }
     // The rows' times count from the start of the minute, so they all turn at once and the view moves once a minute.
     let minute = DateTime::from_timestamp(now.timestamp() - now.timestamp().rem_euclid(60), 0).unwrap_or(now);
 
     let mut warnings = status["warnings"].as_array().cloned().unwrap_or_default();
+    for w in &mut warnings {
+        if text(&w["text"]).is_empty() {
+            w["text"] = json!(text(&w["kind"]));
+        }
+    }
     let state_dir = text(&status["state_dir"]);
-    let watched = watched.to_string_lossy();
-    if !state_dir.is_empty() && state_dir != watched {
+    if !state_dir.is_empty() && Path::new(state_dir) != watched {
+        let watched = watched.to_string_lossy();
         let why = format!("ci-runners keeps its state in {state_dir}; cockpit watches {watched}, so it updates every 20 s");
         warnings.push(json!({"kind": "state-dir", "text": why, "object": null}));
     }
 
     let tick = &status["tick"];
-    let never_ran = tick["installed"] == false || time(&tick["last_at"]).is_none();
+    let never_ran = time(&tick["last_at"]).is_none();
     let stale = warnings.iter().any(|w| text(&w["kind"]) == "tick-stale");
     let tick_row = json!({
         "ago": since(&tick["last_at"], minute).map(span), "ok": tick["ok"] == true, "errors": tick["errors"].as_u64().unwrap_or(0), "stale": stale,
@@ -141,9 +153,13 @@ fn build(source: Source, watched: &Path, now: DateTime<Utc>) -> Value {
     let queue = &status["queue"];
     let queued = queue["queued_runs"].as_u64();
     let cost = raw.iter().map(|s| s["cost_estimate_rub"].as_f64()).sum::<Option<f64>>().map(rubles);
+    let queue_stale = match (queued, time(&queue["at"]), time(&tick["last_at"])) {
+        (Some(_), Some(q), Some(t)) => q < t,
+        _ => false,
+    };
     let tiles = json!({
         "servers": servers.len(), "runners": runners, "busy": busy, "queued": queued,
-        "queue_ago": queued.and_then(|_| since(&queue["at"], minute)).map(span), "cost": cost,
+        "queue_ago": queued.and_then(|_| since(&queue["at"], minute)).map(span), "queue_stale": queue_stale, "cost": cost,
     });
 
     let mut line = match servers.len() {
@@ -239,13 +255,68 @@ mod tests {
     }
 
     #[test]
-    fn no_tick_when_never_ran() {
-        let mut status = fixture();
-        status["tick"]["installed"] = json!(false);
-        assert_eq!(live(status)["state"], "no-tick");
+    fn no_tick_only_before_the_first_tick() {
         let mut status = fixture();
         status["tick"]["last_at"] = Value::Null;
         assert_eq!(live(status)["state"], "no-tick");
+        let mut status = fixture();
+        status["tick"].as_object_mut().unwrap().remove("last_at");
+        assert_eq!(live(status)["state"], "no-tick");
+    }
+
+    #[test]
+    fn an_uninstalled_tick_that_ran_stays_live() {
+        let mut status = fixture();
+        status["tick"]["installed"] = json!(false);
+        status["warnings"] = json!([{"kind": "tick-stale", "text": "no successful tick for > 5 min", "object": null}]);
+        let m = live(status);
+        assert_eq!(m["state"], "live");
+        assert_eq!(m["servers"].as_array().unwrap().len(), 3);
+        assert_eq!(m["warnings"].as_array().unwrap().len(), 1);
+        assert!(m["tick"]["ago"].is_string());
+    }
+
+    #[test]
+    fn a_reply_without_servers_or_tick_reads_down() {
+        for field in ["servers", "tick"] {
+            let mut status = fixture();
+            status[field] = json!("nope");
+            let m = live(status);
+            assert_eq!(m["state"], "down");
+            assert_eq!(m["line"], json!({"text": "ci-runners status is not understood", "tone": "warning"}));
+            assert_eq!(m["badge"]["count"], "!");
+            assert_eq!(m["error"], format!("ci-runners status lacks {field}; cockpit and ci-runners disagree on the format"));
+            let mut status = fixture();
+            status.as_object_mut().unwrap().remove(field);
+            assert_eq!(live(status)["state"], "down");
+        }
+    }
+
+    #[test]
+    fn a_trailing_slash_on_the_state_dir_is_the_same_folder() {
+        let m = model(Source::Live(fixture()), Path::new(&format!("{WATCHED}/")), now());
+        assert!(m["warnings"].as_array().unwrap().iter().all(|w| w["kind"] != "state-dir"));
+    }
+
+    #[test]
+    fn a_queue_older_than_the_tick_is_stale() {
+        let mut status = fixture();
+        status["tick"]["last_at"] = json!("2026-11-22T19:01:13Z");
+        status["queue"]["at"] = json!("2026-11-22T18:57:13Z");
+        assert_eq!(live(status.clone())["tiles"]["queue_stale"], true);
+        status["queue"]["at"] = json!("2026-11-22T19:01:13Z");
+        assert_eq!(live(status.clone())["tiles"]["queue_stale"], false);
+        status["queue"]["at"] = json!("2026-11-22T19:01:20Z");
+        assert_eq!(live(status.clone())["tiles"]["queue_stale"], false);
+        status["queue"] = Value::Null;
+        assert_eq!(live(status)["tiles"]["queue_stale"], false);
+    }
+
+    #[test]
+    fn a_warning_without_text_reads_as_its_kind() {
+        let mut status = fixture();
+        status["warnings"] = json!([{"kind": "idle-long", "object": null}]);
+        assert_eq!(live(status)["warnings"][0]["text"], "idle-long");
     }
 
     #[test]
