@@ -102,3 +102,18 @@ test("no queue tile when the service sends none", async () => {
   assert.deepEqual(plain(f.runners.tiles(m).map((t) => t.label)), ["Servers", "Busy"]);
   assert.deepEqual(plain(f.runners.tiles({ state: "down" })), []);
 });
+
+test("the header says nothing about the tick when it has not run", async () => {
+  const f = await fixture();
+  const m = await model();
+  assert.equal(f.runners.tickText(m), "tick <1m ago");
+  const none = { ...m, state: "no-tick", tick: { ago: null, ok: false, errors: 0, stale: false } };
+  assert.equal(f.runners.tickText(none), null);
+  assert.equal(f.runners.tickText({ state: "absent" }), null);
+});
+
+test("every cost on a server is marked as an estimate", async () => {
+  const f = await fixture();
+  assert.equal(f.runners.costWords("≈ 13 ₽"), "≈ 13 ₽ estimate");
+  assert.equal(f.runners.costWords(null), null);
+});

@@ -57,6 +57,17 @@ export function phaseWords(server) {
   }
 }
 
+/** The header's tick label, or null when the tick has no last run to count from. */
+export function tickText(model) {
+  const ago = model?.tick?.ago;
+  return ago ? `tick ${ago} ago` : null;
+}
+
+/** A server's cost with the word that marks it as an estimate. */
+export function costWords(cost) {
+  return cost ? `${cost} estimate` : null;
+}
+
 /** A server's status in lower case, with its drain flag. */
 function statusWords(server) {
   const status = String(server.status ?? "").toLowerCase();
@@ -189,7 +200,7 @@ export default class Runners {
           )
           .child(div().truncate().text_size(TEXT.xs).text_color(k.mutedFg).child([phaseWords(s), s.age, s.next?.text].filter(Boolean).join(" · "))),
       )
-      .when(this.width >= 760 && Boolean(s.cost), (e) => e.child(div().flex_none().text_size(TEXT.xs).text_color(k.mutedFg).child(s.cost)));
+      .when(this.width >= 760 && Boolean(s.cost), (e) => e.child(div().flex_none().text_size(TEXT.xs).text_color(k.mutedFg).child(costWords(s.cost))));
   }
 
   list(k) {
@@ -233,7 +244,7 @@ export default class Runners {
               this.fact("Phase", phaseWords(s), k),
               this.fact("Age", s.age, k),
               this.fact("Next", s.next?.text, k),
-              this.fact("Cost", s.cost, k),
+              this.fact("Cost (estimate)", s.cost, k),
               this.fact("Runner", s.runner?.name, k, { mono: true }),
               this.fact("Runner is", runner, k),
               this.fact("Flavor", s.flavor, k, { mono: true }),
@@ -251,6 +262,7 @@ export default class Runners {
   live(k) {
     const m = this.model;
     const stale = Boolean(m.tick?.stale);
+    const asOf = stale && m.tick.ago ? `as of ${m.tick.ago} ago` : null;
     return h_flex()
       .flex_1()
       .min_h(0)
@@ -268,7 +280,7 @@ export default class Runners {
               .gap(12)
               .flex_none()
               .child(this.warnings(k) ?? div())
-              .when(stale, (e) => e.child(div().text_size(TEXT.xs).text_color(k.warning).child(`as of ${m.tick.ago} ago`)))
+              .when(Boolean(asOf), (e) => e.child(div().text_size(TEXT.xs).text_color(k.warning).child(asOf)))
               .child(v_flex().when(stale, (e) => e.opacity(0.5)).child(this.tiles())),
           )
           .child(v_flex().flex_1().min_h(0).px(20).when(stale, (e) => e.opacity(0.5)).child(this.list(k)))
@@ -326,7 +338,7 @@ export default class Runners {
           icon: "server",
           title: "Runners",
           description,
-          actions: tick ? [Badge(`tick ${tick.ago} ago`, tick.stale ? "warning" : "outline", { icon: "clock" })] : [],
+          actions: tickText(m) ? [Badge(tickText(m), tick.stale ? "warning" : "outline", { icon: "clock" })] : [],
         }),
       )
       .child(this.body(k))
