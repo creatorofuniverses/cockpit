@@ -39,6 +39,7 @@
   },
   "queue": {
     "queued_runs": 3,
+    "waiting_heavy": 2,
     "at": "2026-11-22T18:54:13Z",
     "stale": true
   },

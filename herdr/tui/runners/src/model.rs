@@ -129,17 +129,28 @@ fn server(s: &Value, warned: bool, runners_known: bool, generated: DateTime<Utc>
     })
 }
 
-/// The autoscale strip's model from the service's `limits`: its switches, the max, the trigger in words and the last decision.
-fn autoscale(limits: &Value, features: &[String], generated: DateTime<Utc>) -> Value {
+/// The autoscale state, controls, waiting count and last decision from the service.
+fn autoscale(limits: &Value, queue: &Value, features: &[String], generated: DateTime<Utc>) -> Value {
     let has = |f: &str| features.iter().any(|x| x == f);
     let count = |v: &Value| v.as_u64().unwrap_or(0);
     let d = &limits["last_decision"];
     let (waiting, created) = (count(&d["waiting"]), count(&d["created"]));
+    let error = d["error"].as_str().filter(|e| !e.is_empty());
+    let blocked = d["blocked"].as_str().filter(|b| !b.is_empty());
+    let on = limits["autoscale"] == true;
+    let paused = limits["paused"] == true;
+    let state = match (on, paused, error, blocked) {
+        (false, _, _, _) => "off",
+        (_, true, _, _) => "paused",
+        (_, _, Some(_), _) => "error",
+        (_, _, _, Some(_)) => "blocked",
+        _ => "on",
+    };
     let (words, tone) = if !d.is_object() {
         ("no decisions yet".to_string(), None)
-    } else if let Some(e) = d["error"].as_str().filter(|e| !e.is_empty()) {
+    } else if let Some(e) = error {
         (format!("error: {e}"), Some("warning"))
-    } else if let Some(b) = d["blocked"].as_str().filter(|b| !b.is_empty()) {
+    } else if let Some(b) = blocked {
         (if waiting > 0 { format!("blocked: {b}, {waiting} waiting") } else { format!("blocked: {b}") }, Some("warning"))
     } else if created > 0 {
         (format!("{waiting} waiting → created {created}"), None)
@@ -148,15 +159,19 @@ fn autoscale(limits: &Value, features: &[String], generated: DateTime<Utc>) -> V
     } else {
         (format!("{waiting} waiting"), None)
     };
-    json!({
-        "on": limits["autoscale"] == true,
-        "paused": limits["paused"] == true, "paused_by": limits["paused_by"],
+    let mut model = json!({
+        "state": state, "on": on,
+        "paused": paused, "paused_by": limits["paused_by"],
         "paused_ago": since(&limits["paused_at"], generated).map(span), "pause_reason": limits["pause_reason"],
         "max": limits["max_servers"], "max_source": limits["max_servers_source"], "max_vms": limits["max_vms"],
         "trigger": format!("≥{} waiting or {}m", count(&limits["min_queued"]), count(&limits["max_wait_minutes"])),
         "last": {"text": words, "ago": since(&d["at"], generated).map(span), "tone": tone},
         "can_pause": has("pause"), "can_set_max": has("set-max"),
-    })
+    });
+    if let Some(waiting) = queue.get("waiting_heavy") {
+        model["waiting"] = json!({"count": waiting.as_u64()});
+    }
+    model
 }
 
 fn build(source: Source, watched: &Path, now: DateTime<Utc>) -> Value {
@@ -208,11 +223,14 @@ fn build(source: Source, watched: &Path, now: DateTime<Utc>) -> Value {
     let busy = servers.iter().filter(|s| s["runner"]["busy"] == true).count();
     let runners = raw.iter().filter(|s| text(&s["role"]) == "runner").count();
     let queue = &status["queue"];
-    let queued = queue["queued_runs"].as_u64();
+    let (queued, queue_label, queue_word) = match queue.get("waiting_heavy") {
+        Some(waiting) => (waiting.as_u64(), "Waiting", "waiting"),
+        None => (queue["queued_runs"].as_u64(), "Queued", "queued"),
+    };
     let cost = status["cost_total_rub"].as_f64().map(rubles);
     let queue_stale = queued.is_some() && queue["stale"] == true;
     let tiles = json!({
-        "servers": servers.len(), "runners": runners, "busy": busy, "queued": queued,
+        "servers": servers.len(), "runners": runners, "busy": busy, "queued": queued, "queue_label": queue_label,
         "queue_ago": queued.and_then(|_| since(&queue["at"], generated)).map(span), "queue_stale": queue_stale, "cost": cost,
     });
 
@@ -222,9 +240,9 @@ fn build(source: Source, watched: &Path, now: DateTime<Utc>) -> Value {
         n => format!("{n} servers · {busy} busy"),
     };
     if let Some(q) = queued {
-        line.push_str(&format!(" · {q} queued"));
+        line.push_str(&format!(" · {q} {queue_word}"));
     }
-    let autoscale = if status["limits"].is_object() { autoscale(&status["limits"], &features, generated) } else { Value::Null };
+    let autoscale = if status["limits"].is_object() { autoscale(&status["limits"], queue, &features, generated) } else { Value::Null };
     if autoscale["on"] == true && autoscale["paused"] == true {
         line.push_str(" · autoscale paused");
     }
@@ -476,6 +494,49 @@ mod tests {
     }
 
     #[test]
+    fn autoscale_state_follows_limits() {
+        for (on, paused, error, blocked, state) in [
+            (false, true, "x", "isolation", "off"),
+            (true, true, "x", "", "paused"),
+            (true, false, "quota", "isolation", "error"),
+            (true, false, "", "isolation", "blocked"),
+            (true, false, "", "", "on"),
+        ] {
+            let mut status = fixture();
+            let limits = &mut status["limits"];
+            limits["autoscale"] = json!(on);
+            limits["paused"] = json!(paused);
+            limits["last_decision"]["error"] = json!(error);
+            limits["last_decision"]["blocked"] = json!(blocked);
+            assert_eq!(live(status)["autoscale"]["state"], state);
+        }
+    }
+
+    #[test]
+    fn waiting_heavy_feeds_the_figure_and_the_tile() {
+        let mut status = fixture();
+        status["queue"]["waiting_heavy"] = json!(2);
+        let m = live(status.clone());
+        assert_eq!(m["autoscale"]["waiting"], json!({"count": 2}));
+        assert_eq!(m["tiles"]["queued"], 2);
+        assert_eq!(m["tiles"]["queue_label"], "Waiting");
+        assert!(m["line"]["text"].as_str().unwrap().contains("· 2 waiting"));
+
+        status["queue"]["waiting_heavy"] = Value::Null;
+        let m = live(status.clone());
+        assert_eq!(m["autoscale"]["waiting"], json!({"count": null}));
+        assert_eq!(m["tiles"]["queued"], Value::Null);
+        assert_eq!(m["tiles"]["queue_label"], "Waiting");
+
+        status["queue"].as_object_mut().unwrap().remove("waiting_heavy");
+        let m = live(status);
+        assert!(m["autoscale"].get("waiting").is_none());
+        assert_eq!(m["tiles"]["queued"], 3);
+        assert_eq!(m["tiles"]["queue_label"], "Queued");
+        assert!(m["line"]["text"].as_str().unwrap().contains("· 3 queued"));
+    }
+
+    #[test]
     fn autoscale_reads_the_service_s_limits() {
         assert_eq!(
             live(fixture())["autoscale"],
@@ -483,7 +544,7 @@ mod tests {
                 "on": true, "paused": false, "paused_by": null, "paused_ago": null, "pause_reason": null,
                 "max": 3, "max_source": "config", "max_vms": 6, "trigger": "≥3 waiting or 10m",
                 "last": {"text": "5 waiting → created 2", "ago": "2m", "tone": null},
-                "can_pause": true, "can_set_max": true
+                "can_pause": true, "can_set_max": true, "state": "on", "waiting": {"count": 2}
             })
         );
     }

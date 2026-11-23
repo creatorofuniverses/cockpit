@@ -19,7 +19,11 @@ expression: "serde_json::to_string_pretty(&live(fixture())).unwrap()"
     "paused": false,
     "paused_ago": null,
     "paused_by": null,
-    "trigger": "≥3 waiting or 10m"
+    "state": "on",
+    "trigger": "≥3 waiting or 10m",
+    "waiting": {
+      "count": 2
+    }
   },
   "badge": {
     "count": 1,
@@ -27,7 +31,7 @@ expression: "serde_json::to_string_pretty(&live(fixture())).unwrap()"
   },
   "error": null,
   "line": {
-    "text": "3 servers · 1 busy · 3 queued",
+    "text": "3 servers · 1 busy · 2 waiting",
     "tone": "warning"
   },
   "servers": [
@@ -120,8 +124,9 @@ expression: "serde_json::to_string_pretty(&live(fixture())).unwrap()"
     "busy": 1,
     "cost": "≈ 53 ₽",
     "queue_ago": "4m",
+    "queue_label": "Waiting",
     "queue_stale": false,
-    "queued": 3,
+    "queued": 2,
     "runners": 2,
     "servers": 3
   },
