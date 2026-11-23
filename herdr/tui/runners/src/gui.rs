@@ -1,4 +1,4 @@
-//! The Runners view the hub serves, read from `ci-runners status --json --offline`.
+//! The Runners view from the local ci-runners status and offline history.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -100,8 +100,44 @@ fn source(bin: Option<PathBuf>) -> Source {
         .unwrap_or_else(|e| Source::Down(format!("ci-runners status printed no JSON: {e}")))
 }
 
+/// The offline history when the binary declares it, or why the request failed.
+fn stats(bin: &Path, limit: Duration) -> Option<Result<Value, String>> {
+    if !features(bin).ok()?.iter().any(|f| f == "stats-offline") {
+        return None;
+    }
+    Some((|| {
+        let what = "ci-runners stats";
+        let out = call(bin, &["stats", "--json", "--offline"], what, limit)?;
+        if !out.status.success() {
+            let why = first_line(&String::from_utf8_lossy(&out.stderr));
+            return Err(if why.is_empty() { format!("{what} exited {}", out.status.code().unwrap_or(1)) } else { why });
+        }
+        let value: Value = serde_json::from_slice(&out.stdout).map_err(|e| format!("{what} printed no JSON: {e}"))?;
+        if value["v"].as_u64() != Some(model::JSON_V) {
+            return Err(format!("{what} answers in a newer format than this cockpit reads"));
+        }
+        Ok(value)
+    })())
+}
+
+fn view_for(bin: Option<PathBuf>, stats_limit: Duration) -> Value {
+    let (source, stats) = match bin {
+        None => (Source::Absent, None),
+        // Fill the shared feature cache before starting the two requests.
+        Some(bin) => match features(&bin) {
+            Err(error) => (Source::Down(error), None),
+            Ok(_) => std::thread::scope(|scope| {
+                let history = scope.spawn(|| stats(&bin, stats_limit));
+                let status = source(Some(bin.clone()));
+                (status, history.join().expect("stats worker panicked"))
+            }),
+        },
+    };
+    model::model(source, stats, &state_dir(), Utc::now(), &chrono::Local)
+}
+
 pub fn view(_args: &Value, _doc: &dyn Fn(&str) -> Value) -> Value {
-    model::model(source(bin()), None, &state_dir(), Utc::now(), &chrono::Local)
+    view_for(bin(), LIMIT)
 }
 
 /// Runs an autoscale command for the view: `pause`, `resume`, `set-max` (one count) and `reset-max`; other actions are not ours.
@@ -190,20 +226,20 @@ mod tests {
 
     impl Fake {
         fn new(version: &str, status: &str) -> Fake {
-            Fake::build(version, status, "true")
+            Fake::build(version, status, "true", "exit 2")
         }
 
         /// A fake that declares `features` and runs the `autoscale` snippet.
         fn controls(features: &[&str], autoscale: &str) -> Fake {
             let list = features.iter().map(|f| format!("\"{f}\"")).collect::<Vec<_>>().join(",");
-            Fake::build(&format!("echo '{{\"version\":\"0\",\"json_v\":1,\"features\":[{list}]}}'"), "echo '{}'", autoscale)
+            Fake::build(&format!("echo '{{\"version\":\"0\",\"json_v\":1,\"features\":[{list}]}}'"), "echo '{}'", autoscale, "exit 2")
         }
 
-        fn build(version: &str, status: &str, autoscale: &str) -> Fake {
+        fn build(version: &str, status: &str, autoscale: &str, stats: &str) -> Fake {
             let dir = tempfile::tempdir().unwrap();
             let bin = dir.path().join("ci-runners");
             let script = format!(
-                "#!/bin/sh\necho \"$*\" >> \"$(dirname \"$0\")/calls\"\ncase \"$1\" in\nversion) {version} ;;\nstatus) {status} ;;\nautoscale) {autoscale} ;;\nesac\n"
+                "#!/bin/sh\necho \"$*\" >> \"$(dirname \"$0\")/calls\"\ncase \"$1\" in\nversion) {version} ;;\nstatus) {status} ;;\nstats) {stats} ;;\nautoscale) {autoscale} ;;\nesac\n"
             );
             fs::write(&bin, script).unwrap();
             fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
@@ -320,6 +356,67 @@ mod tests {
         drop(file);
         source(Some(fake.bin.clone()));
         assert_eq!(fake.calls("version"), 2);
+    }
+
+    fn stats_fake(stats: &str) -> Fake {
+        Fake::build(r#"echo '{"features":["status-offline","stats-offline"]}'"#, &format!("echo '{}'", STATUS.trim()), "true", stats)
+    }
+
+    #[test]
+    fn stats_is_not_asked_without_the_feature() {
+        let fake = Fake::build(r#"echo '{"features":["status-offline"]}'"#, &format!("echo '{}'", STATUS.trim()), "true", "exit 2");
+        assert_eq!(stats(&fake.bin, LIMIT), None);
+        let m = view_for(Some(fake.bin.clone()), LIMIT);
+        assert_eq!(m["state"], "live");
+        assert_eq!(m.get("history"), Some(&Value::Null));
+        assert_eq!(fake.calls("stats"), 0);
+    }
+
+    #[test]
+    fn stats_errors_are_words() {
+        for (reply, error) in [
+            ("printf '\n journal unreadable\nsecond line\n' >&2; exit 3", "journal unreadable"),
+            ("exit 4", "ci-runners stats exited 4"),
+            ("echo garbage", "ci-runners stats printed no JSON:"),
+            (r#"echo '{"v":2}'"#, "ci-runners stats answers in a newer format than this cockpit reads"),
+        ] {
+            let fake = stats_fake(reply);
+            let result = stats(&fake.bin, LIMIT).expect("stats feature");
+            let actual = result.unwrap_err();
+            if reply == "echo garbage" {
+                assert!(actual.starts_with(error), "{actual}");
+            } else {
+                assert_eq!(actual, error);
+            }
+        }
+    }
+
+    #[test]
+    fn a_hung_stats_does_not_hold_the_status() {
+        let fake = Fake::build(
+            r#"echo '{"features":["status-offline","stats-offline"]}'"#,
+            &format!(r#"n=0; while [ ! -f "$0.stats-started" ]; do n=$((n+1)); [ "$n" -lt 300 ] || exit 4; sleep 0.01; done; echo '{}'"#, STATUS.trim()),
+            "true",
+            r#"touch "$0.stats-started"; exec sleep 30"#,
+        );
+        let started = Instant::now();
+        let view = view_for(Some(fake.bin.clone()), Duration::from_secs(1));
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert_eq!(view["state"], "live");
+        assert_eq!(view["history"], json!({"error": "ci-runners stats did not answer within 1s"}));
+        assert_eq!(fake.calls("stats --json --offline"), 1);
+        assert_eq!(fake.calls("version --json"), 1);
+    }
+
+    #[test]
+    fn the_view_loads_offline_stats() {
+        let response = include_str!("../tests/fixtures/stats-live.json");
+        let fake = stats_fake(&format!("echo '{}'", response.trim()));
+        let m = view_for(Some(fake.bin.clone()), LIMIT);
+        assert_eq!(m["state"], "live");
+        assert_eq!(m["history"]["empty"], false);
+        assert_eq!(m["history"]["windows"]["24h"]["tiles"][0]["value"], 4);
+        assert_eq!(fake.calls("stats --json --offline"), 1);
     }
 
     fn act_on(fake: &Fake, action: &str, args: &[Value]) -> Result<String, String> {

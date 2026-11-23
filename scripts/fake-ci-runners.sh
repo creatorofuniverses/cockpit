@@ -2,8 +2,8 @@
 # A stand-in for ci-runners in the sandbox, answering from the runners crate's fixtures:
 #   CI_RUNNERS_BIN=$PWD/scripts/fake-ci-runners.sh COCKPIT_SANDBOX=/tmp/cc-r sh scripts/sandbox.sh start
 # CI_RUNNERS_FAKE=stale serves the fixture with a stale tick; CI_RUNNERS_FAKE=fail makes every autoscale command
-# fail with "control.lock busy"; anything else serves the live one. The autoscale commands keep the pause and the
-# server cap in a state file that the status answer reads back.
+# fail with "control.lock busy". CI_RUNNERS_FAKE=nostats hides the offline history feature. The autoscale commands
+# keep the pause and server cap in a state file that the status answer reads back.
 here=$(cd "$(dirname "$0")" && pwd)
 fixtures="$here/../herdr/tui/runners/tests/fixtures"
 state="${TMPDIR:-/tmp}/fake-ci-runners.$(id -u)"
@@ -44,7 +44,20 @@ case "$1" in
     ;;
   *)
     case "$*" in
-      "version --json") cat "$fixtures/version.json" ;;
+      "version --json")
+        if [ "$CI_RUNNERS_FAKE" = nostats ]; then
+          sed 's/, "stats-offline"//' "$fixtures/version.json"
+        else
+          cat "$fixtures/version.json"
+        fi
+        ;;
+      "stats --json --offline")
+        if [ "$CI_RUNNERS_FAKE" = nostats ]; then
+          echo "fake-ci-runners: stats unavailable" >&2
+          exit 2
+        fi
+        cat "$fixtures/stats-live.json"
+        ;;
       "status --json --offline")
         paused=$(get paused)
         max=$(get max)
