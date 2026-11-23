@@ -99,6 +99,10 @@ test("the Autoscale line says what the service says", async () => {
   assert.equal(f.runners.autoscaleLine({ ...m, autoscale: { ...m.autoscale, on: false } }), "autoscale off in config");
   const paused = f.runners.autoscaleLine({ ...m, autoscale: { ...m.autoscale, paused: true, paused_by: "cockpit", paused_ago: "5m" } });
   assert.ok(paused.startsWith("paused by cockpit 5m ago"), paused);
+  const why = f.runners.autoscaleLine({ ...m, autoscale: { ...m.autoscale, paused: true, paused_by: "cockpit", paused_ago: "5m", pause_reason: "deploy freeze" } });
+  assert.ok(why.startsWith("paused by cockpit 5m ago · deploy freeze"), why);
+  const broken = f.runners.autoscaleLine({ ...m, autoscale: { ...m.autoscale, paused: true, paused_by: null, paused_ago: null, pause_reason: "control.json: unexpected end of JSON input" } });
+  assert.ok(broken.startsWith("paused · control.json: unexpected end of JSON input"), broken);
   assert.equal(f.runners.autoscaleLine({ ...m, autoscale: null }), null);
 });
 

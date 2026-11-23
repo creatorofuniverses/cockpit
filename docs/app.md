@@ -1644,16 +1644,18 @@ shows its `kind`. Ages, idle times and deadlines are the service's own `age_s`, 
 queue's ages count from its `generated_at`, so the model does not depend on cockpit's clock. A deadline a minute or more in
 the past reads `overdue` and the row turns to the warning tone; `job_lost` adds `· job lost`. A tick that ended with
 errors adds them to the header badge and shows `tick.error_text` under the warnings. Costs are the service's estimates,
-shown as `≈ N ₽`; the tile is its `cost_total_rub`. When the service's `state_dir` is not the folder the
-hub watches, a `state-dir` warning says the view updates every 20 seconds. `queue_ago` is the age of the queue count and is present whenever the queue is polled; `queue_stale` is the service's `queue.stale` flag
-(missing reads false): the last queue poll failed and the count is the last good one. The screen marks it in the warning tone.
+shown as `≈ N ₽`; the tile is its `cost_total_rub`. When the service's `state_dir` is not the folder the hub watches, a
+`state-dir` warning says the view updates every 20 seconds. `queue_ago` is the age of the queue count and is present
+whenever the queue is polled; `queue_stale` is the service's `queue.stale` flag (missing reads false): the last queue
+poll failed and the count is the last good one. The screen marks it in the warning tone.
 
-The Autoscale strip sits above the servers when the model has an `autoscale` block. It reads `on` (or `paused by <who> <ago> ago`,
-in the warning tone), `max N (<source>, cap M)`, `trigger ≥Q waiting or Wm` and `last <ago> ago: <decision>`; a decision that is
-blocked or failed is in the warning tone, and with `autoscale` off in the service's config the strip reads `autoscale off in config`
-and has no buttons. The buttons are Pause or Resume (key `p`, shown when `can_pause`), `Max −` (`-`, disabled at 0), `Max +` (`+` or
-`=`, disabled at `max_vms`) and, once the max was set from here (`max_source` is `set-max`), `Reset max` (`0`); the max buttons show
-when `can_set_max`. The keys work in the space like the buttons, and only one control runs at a time.
+The Autoscale strip sits above the servers when the model has an `autoscale` block. It reads `on` (or `paused by <who>
+<ago> ago · <reason>`, in the warning tone, each part only when the service gives it), `max N (<source>, cap M)`,
+`trigger ≥Q waiting or Wm` and `last <ago> ago: <decision>`; a decision that is blocked or failed is in the warning
+tone, and with `autoscale` off in the service's config the strip reads `autoscale off in config` and has no buttons. The
+buttons are Pause or Resume (key `p`, shown when `can_pause`), `Max −` (`-`, disabled at 0), `Max +` (`+` or `=`,
+disabled at `max_vms`) and, once the max was set from here (`max_source` is `set-max`), `Reset max` (`0`); the max
+buttons show when `can_set_max`. The keys work in the space like the buttons, and only one control runs at a time.
 
 A control is a hub act on the `runners` view: `pause`, `resume`, `set-max` (one server count) and `reset-max`. The hub runs
 `ci-runners autoscale pause|resume|set-max N|set-max --reset` with `--actor cockpit` and a 20 second limit, only when the service's

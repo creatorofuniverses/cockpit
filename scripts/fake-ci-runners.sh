@@ -27,7 +27,15 @@ case "$1" in
       "autoscale pause --actor cockpit") put paused true ;;
       "autoscale resume --actor cockpit") put paused false ;;
       "autoscale set-max --reset --actor cockpit") put max reset ;;
-      "autoscale set-max "[0-9]*" --actor cockpit") put max "$3" ;;
+      "autoscale set-max "*" --actor cockpit")
+        case "$3" in
+          '' | *[!0-9]*)
+            echo "fake-ci-runners: unsupported arguments: $*" >&2
+            exit 2
+            ;;
+        esac
+        put max "$3"
+        ;;
       *)
         echo "fake-ci-runners: unsupported arguments: $*" >&2
         exit 2

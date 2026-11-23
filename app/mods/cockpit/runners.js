@@ -1,6 +1,6 @@
 // The Runners space: the cloud CI servers and runners that ci-runners manages, as the hub's `runners` view gives them.
 // Above, the counts and the estimated cost now; below, one row per server with what it does and what the service will
-// do next; beside the list, the selected server's facts. The screen only reads: ci-runners does the work.
+// do next; beside the list, the selected server's facts. The screen shows ci-runners' state, and its only actions are the autoscale controls.
 
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
@@ -44,7 +44,7 @@ export function autoscaleParts(model) {
   const a = model?.autoscale;
   if (!a) return null;
   if (!a.on) return [{ text: "autoscale off in config", warn: false }];
-  const head = a.paused ? ["paused", a.paused_by ? `by ${a.paused_by}` : null, a.paused_ago ? `${a.paused_ago} ago` : null].filter(Boolean).join(" ") : "on";
+  const head = a.paused ? ["paused", a.paused_by ? `by ${a.paused_by}` : null, a.paused_ago ? `${a.paused_ago} ago` : null].filter(Boolean).join(" ") + (a.pause_reason ? ` · ${a.pause_reason}` : "") : "on";
   const last = a.last ? `last ${a.last.ago ? `${a.last.ago} ago: ` : ": "}${a.last.text}` : null;
   return [
     { text: head, warn: Boolean(a.paused) },
@@ -210,7 +210,7 @@ export default class Runners {
 
   async send(cx, action, args) {
     try {
-      const r = await hub.act("runners", action, args);
+      const r = await hub.act("runners", action, args, cx);
       if (r.error) this.toasts.push(cx, r.error, { kind: "error" });
       else if (r.note) this.toasts.push(cx, r.note, { kind: "success" });
     } catch (e) {
