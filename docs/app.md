@@ -1597,7 +1597,8 @@ The Runners space shows the CI runner servers that the `ci-runners` service keep
 `status-offline`, each with a 5 second limit. It rebuilds when `~/.local/state/ci-runners` changes and every 20 seconds.
 It makes no network calls and calls nothing that is not in `features`; an older service reads as `outdated`, and a
 `status` reply with a `v` it does not know reads as `newer`. Cockpit adds no thresholds of its own: problems come only
-from the service's `warnings` (a stopped tick is the `tick-stale` warning), and the view is read-only, with no actions.
+from the service's `warnings` (a stopped tick is the `tick-stale` warning). The view changes nothing about the servers; its only
+actions are the autoscale controls below.
 The space has no TUI half and no place in the config's `spaces`: its sidebar icon and Home line show wherever the hub
 finds ci-runners (`CI_RUNNERS_BIN`, then `PATH`, then `~/.local/bin/ci-runners`), and nothing is created on a machine
 without it.
@@ -1611,6 +1612,14 @@ without it.
   "tick":  {"ago": "1m", "ok": true, "errors": 0, "stale": false, "error_text": "…" | null} | null,
   "warnings": [{"kind": "tick-stale", "text": "no successful tick for > 5 min", "object": null}],
   "tiles": {"servers": 3, "runners": 2, "busy": 1, "queued": 3 | null, "queue_ago": "4m" | null, "queue_stale": false, "cost": "≈ 53 ₽" | null},
+  "autoscale": {                             // null when the status has no `limits` object
+    "on": true,                              // limits.autoscale
+    "paused": false, "paused_by": null | "cockpit", "paused_ago": "5m" | null, "pause_reason": null | "…",
+    "max": 3, "max_source": "config" | "set-max", "max_vms": 6,
+    "trigger": "≥3 waiting or 5m",           // min_queued, max_wait_minutes
+    "last": {"text": "4 waiting → created 1", "ago": "2m" | null, "tone": "warning" | null},   // the last decision in words
+    "can_pause": true, "can_set_max": true   // the service's `features` list pause and set-max
+  } | null,
   "servers": [{
     "id": "…", "name": "sel-ci-demo2", "role": "runner" | "image-builder" | null, "status": "ACTIVE", "drain": false,
     "phase": "busy" | "idle" | "booting" | "draining" | "building" | "unowned" | "unknown" | "other",
@@ -1639,9 +1648,27 @@ shown as `≈ N ₽`; the tile is its `cost_total_rub`. When the service's `stat
 hub watches, a `state-dir` warning says the view updates every 20 seconds. `queue_ago` is the age of the queue count and is present whenever the queue is polled; `queue_stale` is the service's `queue.stale` flag
 (missing reads false): the last queue poll failed and the count is the last good one. The screen marks it in the warning tone.
 
+The Autoscale strip sits above the servers when the model has an `autoscale` block. It reads `on` (or `paused by <who> <ago> ago`,
+in the warning tone), `max N (<source>, cap M)`, `trigger ≥Q waiting or Wm` and `last <ago> ago: <decision>`; a decision that is
+blocked or failed is in the warning tone, and with `autoscale` off in the service's config the strip reads `autoscale off in config`
+and has no buttons. The buttons are Pause or Resume (key `p`, shown when `can_pause`), `Max −` (`-`, disabled at 0), `Max +` (`+` or
+`=`, disabled at `max_vms`) and, once the max was set from here (`max_source` is `set-max`), `Reset max` (`0`); the max buttons show
+when `can_set_max`. The keys work in the space like the buttons, and only one control runs at a time.
+
+A control is a hub act on the `runners` view: `pause`, `resume`, `set-max` (one server count) and `reset-max`. The hub runs
+`ci-runners autoscale pause|resume|set-max N|set-max --reset` with `--actor cockpit` and a 20 second limit, only when the service's
+`features` list `pause` or `set-max`. A success answers a note shown as a toast: `Autoscale paused`, `Autoscale resumed`,
+`Max servers set to N` or `Max servers back to the config's`. A failure answers an error toast: the first line of the command's
+stderr (or `ci-runners autoscale <verb> exited <code>`), `this ci-runners cannot pause autoscale; update it` /
+`this ci-runners cannot change the server cap; update it` when the feature is missing, `not a server count: …` for a bad count, or
+`ci-runners is not installed on this machine`.
+
 For the sandbox, `scripts/fake-ci-runners.sh` answers `version --json` and `status --json --offline` from the crate's
 fixtures (`CI_RUNNERS_FAKE=stale` serves the one with a stale tick):
 `CI_RUNNERS_BIN=$PWD/scripts/fake-ci-runners.sh COCKPIT_SANDBOX=/tmp/cc-r sh scripts/sandbox.sh start`.
+It also answers `autoscale pause|resume|set-max N|set-max --reset --actor cockpit` by keeping the pause and the max in
+`${TMPDIR:-/tmp}/fake-ci-runners.<uid>` and rewriting the fixture's `paused`, `paused_by`, `max_servers` and `max_servers_source`
+from it, so the strip follows the buttons; `CI_RUNNERS_FAKE=fail` makes every `autoscale` command exit 1 with `control.lock busy`.
 
 ## Views `routines` and `routines-when` (the routines space, both halves)
 
