@@ -2,4 +2,5 @@
 //! each server does, what waits in the queue and what the janitor will do next.
 
 pub mod gui;
+pub mod history;
 pub mod model;

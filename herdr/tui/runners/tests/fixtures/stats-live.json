@@ -1,0 +1,197 @@
+{
+  "v": 1,
+  "generated_at": "2026-11-22T19:01:53Z",
+  "sources": {
+    "journal": true,
+    "github": false,
+    "billing": false
+  },
+  "journal": {
+    "since": "2026-11-17T00:00:00Z",
+    "bad_lines": 0
+  },
+  "covered_until": "2026-11-22T19:00:00Z",
+  "price_per_hour_rub": 4.34,
+  "bucket": "1h",
+  "series": [
+    {"start": "2026-11-21T19:00:00Z", "coverage": 0, "demand_known": 0, "approx": false, "waiting_max": null, "oldest_s_max": null, "truncated": null, "local_busy_max": null, "local_online_max": null, "cloud_busy": null, "cloud_idle": null, "cloud_booting": null, "created_auto": null, "created_manual": null},
+    {"start": "2026-11-21T20:00:00Z", "coverage": 1, "demand_known": 0, "approx": false, "waiting_max": null, "oldest_s_max": null, "truncated": null, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 1, "cloud_idle": 1, "cloud_booting": 1, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-21T21:00:00Z", "coverage": 0.73, "demand_known": 1, "approx": true, "waiting_max": 2, "oldest_s_max": 40, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 2, "cloud_idle": 1, "cloud_booting": 0, "created_auto": 2, "created_manual": 1},
+    {"start": "2026-11-21T22:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 3, "oldest_s_max": 60, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 3, "cloud_idle": 1, "cloud_booting": 1, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-21T23:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 4, "oldest_s_max": 80, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 0, "cloud_idle": 1, "cloud_booting": 0, "created_auto": 1, "created_manual": 0},
+    {"start": "2026-11-22T00:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 5, "oldest_s_max": 100, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 1, "cloud_idle": 1, "cloud_booting": 1, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T01:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 0, "oldest_s_max": 120, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 2, "cloud_idle": 1, "cloud_booting": 0, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T02:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 1, "oldest_s_max": 140, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 3, "cloud_idle": 1, "cloud_booting": 1, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T03:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 2, "oldest_s_max": 160, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 0, "cloud_idle": 1, "cloud_booting": 0, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T04:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 3, "oldest_s_max": 180, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 1, "cloud_idle": 1, "cloud_booting": 1, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T05:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 4, "oldest_s_max": 200, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 2, "cloud_idle": 1, "cloud_booting": 0, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T06:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 5, "oldest_s_max": 220, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 3, "cloud_idle": 1, "cloud_booting": 1, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T07:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 0, "oldest_s_max": 240, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 0, "cloud_idle": 1, "cloud_booting": 0, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T08:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 1, "oldest_s_max": 260, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 1, "cloud_idle": 1, "cloud_booting": 1, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T09:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 2, "oldest_s_max": 280, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 2, "cloud_idle": 1, "cloud_booting": 0, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T10:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 3, "oldest_s_max": 300, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 3, "cloud_idle": 1, "cloud_booting": 1, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T11:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 4, "oldest_s_max": 320, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 0, "cloud_idle": 1, "cloud_booting": 0, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T12:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 5, "oldest_s_max": 340, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 1, "cloud_idle": 1, "cloud_booting": 1, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T13:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 0, "oldest_s_max": 360, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 2, "cloud_idle": 1, "cloud_booting": 0, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T14:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 1, "oldest_s_max": 380, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 3, "cloud_idle": 1, "cloud_booting": 1, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T15:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 2, "oldest_s_max": 400, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 0, "cloud_idle": 1, "cloud_booting": 0, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T16:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 3, "oldest_s_max": 420, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 1, "cloud_idle": 1, "cloud_booting": 1, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T17:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 4, "oldest_s_max": 440, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 2, "cloud_idle": 1, "cloud_booting": 0, "created_auto": 0, "created_manual": 0},
+    {"start": "2026-11-22T18:00:00Z", "coverage": 1, "demand_known": 1, "approx": false, "waiting_max": 5, "oldest_s_max": 460, "truncated": false, "local_busy_max": 1, "local_online_max": 2, "cloud_busy": 3, "cloud_idle": 1, "cloud_booting": 1, "created_auto": 0, "created_manual": 0}
+  ],
+  "windows": {
+    "24h": {
+      "from": "2026-11-21T19:00:00Z",
+      "to": "2026-11-22T19:00:00Z",
+      "coverage": 0.73,
+      "approx": true,
+      "servers": {
+        "started": {
+          "auto": 3,
+          "manual": 1
+        },
+        "with_jobs": 2,
+        "online_no_jobs": 2,
+        "never_online": 0,
+        "unclear": 1,
+        "pending": 1,
+        "deletes": {
+          "idle": 2
+        },
+        "time_to_online_s": {
+          "p50": 170,
+          "max": 227
+        }
+      },
+      "hours": {
+        "busy": 5,
+        "idle": 7,
+        "booting": 1,
+        "stopped": 0,
+        "expired": 0,
+        "unknown": 0,
+        "builder": 0
+      },
+      "autoscale": {
+        "passes_with_demand": 14,
+        "threshold_met": 1,
+        "created": 3,
+        "blocked_passes": {
+          "isolation": 2
+        },
+        "blocked_minutes": {
+          "isolation": 6
+        },
+        "errors": {
+          "passes": 2,
+          "episodes": 2,
+          "texts": {
+            "acme capacity": 2
+          }
+        },
+        "paused_minutes": 30,
+        "disabled_minutes": 15
+      },
+      "cost": {
+        "estimate": true,
+        "billed_hours": 13,
+        "estimate_rub": 56.4,
+        "by_state_rub": {
+          "busy": 22,
+          "idle": 30,
+          "booting": 4,
+          "other": 0,
+          "unknown": 0
+        },
+        "bounded": true
+      },
+      "tick": {
+        "error_passes": 0,
+        "gap_minutes": 12,
+        "journal_lost": 0
+      }
+    },
+    "7d": {
+      "from": "2026-11-15T19:00:00Z",
+      "to": "2026-11-22T19:00:00Z",
+      "coverage": 0.8,
+      "approx": false,
+      "servers": {
+        "started": {
+          "auto": 8,
+          "manual": 2,
+          "builder": 1
+        },
+        "with_jobs": 6,
+        "online_no_jobs": 2,
+        "never_online": 0,
+        "unclear": 1,
+        "pending": 1,
+        "deletes": {
+          "idle": 2
+        },
+        "time_to_online_s": {
+          "p50": 170,
+          "max": 227
+        }
+      },
+      "hours": {
+        "busy": 18,
+        "idle": 7,
+        "booting": 3,
+        "stopped": 1,
+        "expired": 0,
+        "unknown": 0,
+        "builder": 2
+      },
+      "autoscale": {
+        "passes_with_demand": 14,
+        "threshold_met": 1,
+        "created": 3,
+        "blocked_passes": {
+          "isolation": 2
+        },
+        "blocked_minutes": {
+          "isolation": 6
+        },
+        "errors": {
+          "passes": 2,
+          "episodes": 2,
+          "texts": {
+            "acme capacity": 2
+          }
+        },
+        "paused_minutes": 30,
+        "disabled_minutes": 15
+      },
+      "cost": {
+        "estimate": true,
+        "billed_hours": 31.5,
+        "estimate_rub": 136.7,
+        "by_state_rub": {
+          "busy": 22,
+          "idle": 30,
+          "booting": 4,
+          "other": 0,
+          "unknown": 0
+        },
+        "bounded": false
+      },
+      "tick": {
+        "error_passes": 0,
+        "gap_minutes": 12,
+        "journal_lost": 0
+      }
+    }
+  },
+  "days": [
+    {"date": "2026-11-16", "coverage": 0, "approx": false, "billed_hours": null, "estimate_rub": null, "bounded": false, "hours": null, "servers_started": null},
+    {"date": "2026-11-17", "coverage": 0.73, "approx": true, "billed_hours": 6, "estimate_rub": 26, "bounded": false, "hours": {"busy": 3, "idle": 1, "booting": 2, "stopped": 1, "expired": 0, "unknown": 0, "builder": 0}, "servers_started": 2},
+    {"date": "2026-11-18", "coverage": 1, "approx": false, "billed_hours": 6, "estimate_rub": 26, "bounded": false, "hours": {"busy": 3, "idle": 1, "booting": 2, "stopped": 0, "expired": 0, "unknown": 0, "builder": 0}, "servers_started": 2},
+    {"date": "2026-11-19", "coverage": 1, "approx": false, "billed_hours": 6, "estimate_rub": 26, "bounded": false, "hours": {"busy": 3, "idle": 1, "booting": 2, "stopped": 0, "expired": 0, "unknown": 0, "builder": 0}, "servers_started": 2},
+    {"date": "2026-11-20", "coverage": 1, "approx": false, "billed_hours": 6, "estimate_rub": 26, "bounded": false, "hours": {"busy": 3, "idle": 1, "booting": 2, "stopped": 0, "expired": 0, "unknown": 0, "builder": 0}, "servers_started": 2},
+    {"date": "2026-11-21", "coverage": 1, "approx": false, "billed_hours": 6, "estimate_rub": 26, "bounded": false, "hours": {"busy": 3, "idle": 1, "booting": 2, "stopped": 0, "expired": 0, "unknown": 0, "builder": 0}, "servers_started": 2},
+    {"date": "2026-11-22", "coverage": 1, "approx": false, "billed_hours": 6, "estimate_rub": 26, "bounded": false, "hours": {"busy": 3, "idle": 1, "booting": 2, "stopped": 0, "expired": 0, "unknown": 0, "builder": 0}, "servers_started": 2}
+  ],
+  "warnings": []
+}

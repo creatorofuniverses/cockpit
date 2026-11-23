@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use serde_json::{Value, json};
 
 /// The `status --json` shape this model reads; any other `v` reads as a newer service.
@@ -26,7 +26,7 @@ fn text(v: &Value) -> &str {
     v.as_str().unwrap_or("")
 }
 
-fn time(v: &Value) -> Option<DateTime<Utc>> {
+pub(crate) fn time(v: &Value) -> Option<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(v.as_str()?).ok().map(|t| t.with_timezone(&Utc))
 }
 
@@ -45,7 +45,7 @@ pub fn span(secs: f64) -> String {
     }
 }
 
-fn rubles(v: f64) -> String {
+pub(crate) fn rubles(v: f64) -> String {
     format!("≈ {v:.0} ₽")
 }
 
@@ -259,9 +259,14 @@ fn build(source: Source, watched: &Path, now: DateTime<Utc>) -> Value {
     })
 }
 
-/// The model for whatever the source gave: `{state: "absent"}`, a card for an old or silent service, or the whole status.
-pub fn model(source: Source, watched: &Path, now: DateTime<Utc>) -> Value {
-    build(source, watched, now)
+/// The view model from the service's status and its independently available history.
+pub fn model<Tz: TimeZone>(source: Source, stats: Option<Result<Value, String>>, watched: &Path, now: DateTime<Utc>, tz: &Tz) -> Value
+where
+    Tz::Offset: std::fmt::Display,
+{
+    let mut model = build(source, watched, now);
+    model["history"] = stats.map_or(Value::Null, |s| crate::history::history(s.as_ref().map_err(String::as_str), tz));
+    model
 }
 
 #[cfg(test)]
@@ -286,8 +291,14 @@ mod tests {
         vec!["pause".into(), "set-max".into()]
     }
 
+    fn without_history(source: Source, watched: &Path, now: DateTime<Utc>) -> Value {
+        model(source, None, watched, now, &chrono::Utc)
+    }
+
     fn live(status: Value) -> Value {
-        model(Source::Live(status, features()), Path::new(WATCHED), now())
+        let stats = serde_json::from_str(include_str!("../tests/fixtures/stats-live.json")).unwrap();
+        let tz = chrono::FixedOffset::east_opt(3 * 3600).unwrap();
+        model(Source::Live(status, features()), Some(Ok(stats)), Path::new(WATCHED), now(), &tz)
     }
 
     fn small(drain: bool, role: &str, status: &str, runner: Value) -> Value {
@@ -357,10 +368,10 @@ mod tests {
 
     #[test]
     fn absent_hides_and_the_rest_warn() {
-        let absent = model(Source::Absent, Path::new(WATCHED), now());
+        let absent = without_history(Source::Absent, Path::new(WATCHED), now());
         assert_eq!((&absent["line"], &absent["badge"]), (&Value::Null, &Value::Null));
-        let old = model(Source::Outdated("update ci-runners".into()), Path::new(WATCHED), now());
-        let down = model(Source::Down("timed out".into()), Path::new(WATCHED), now());
+        let old = without_history(Source::Outdated("update ci-runners".into()), Path::new(WATCHED), now());
+        let down = without_history(Source::Down("timed out".into()), Path::new(WATCHED), now());
         assert_eq!((old["state"].as_str(), old["badge"]["count"].as_str()), (Some("outdated"), Some("!")));
         assert_eq!((down["state"].as_str(), down["error"].as_str(), down["badge"]["count"].as_str()), (Some("down"), Some("timed out"), Some("!")));
     }
@@ -414,7 +425,7 @@ mod tests {
 
     #[test]
     fn a_trailing_slash_on_the_state_dir_is_the_same_folder() {
-        let m = model(Source::Live(fixture(), features()), Path::new(&format!("{WATCHED}/")), now());
+        let m = without_history(Source::Live(fixture(), features()), Path::new(&format!("{WATCHED}/")), now());
         assert!(m["warnings"].as_array().unwrap().iter().all(|w| w["kind"] != "state-dir"));
     }
 
@@ -471,17 +482,17 @@ mod tests {
 
     #[test]
     fn times_count_from_the_service_s_answer_not_cockpit_s_clock() {
-        let a = model(Source::Live(fixture(), features()), Path::new(WATCHED), at("2026-11-22T19:01:05Z"));
-        let b = model(Source::Live(fixture(), features()), Path::new(WATCHED), at("2026-11-23T09:00:00Z"));
+        let a = without_history(Source::Live(fixture(), features()), Path::new(WATCHED), at("2026-11-22T19:01:05Z"));
+        let b = without_history(Source::Live(fixture(), features()), Path::new(WATCHED), at("2026-11-23T09:00:00Z"));
         assert_eq!(a, b);
         let mut status = fixture();
         status["generated_at"] = Value::Null;
-        assert_eq!(model(Source::Live(status, features()), Path::new(WATCHED), at("2026-11-22T19:05:13Z"))["tick"]["ago"], "4m");
+        assert_eq!(without_history(Source::Live(status, features()), Path::new(WATCHED), at("2026-11-22T19:05:13Z"))["tick"]["ago"], "4m");
     }
 
     #[test]
     fn a_different_state_dir_warns() {
-        let m = model(Source::Live(fixture(), features()), Path::new("/elsewhere"), now());
+        let m = without_history(Source::Live(fixture(), features()), Path::new("/elsewhere"), now());
         let kinds: Vec<&str> = m["warnings"].as_array().unwrap().iter().map(|w| w["kind"].as_str().unwrap()).collect();
         assert_eq!(kinds, ["reap-overdue", "state-dir"]);
         assert_eq!(m["badge"]["count"], 2);
@@ -556,9 +567,9 @@ mod tests {
         assert_eq!(live(status.clone())["autoscale"], Value::Null);
         status.as_object_mut().unwrap().remove("limits");
         assert_eq!(live(status)["autoscale"], Value::Null);
-        let m = model(Source::Live(fixture(), vec![]), Path::new(WATCHED), now());
+        let m = without_history(Source::Live(fixture(), vec![]), Path::new(WATCHED), now());
         assert_eq!((&m["autoscale"]["can_pause"], &m["autoscale"]["can_set_max"]), (&json!(false), &json!(false)));
-        let m = model(Source::Live(fixture(), vec!["pause".into()]), Path::new(WATCHED), now());
+        let m = without_history(Source::Live(fixture(), vec!["pause".into()]), Path::new(WATCHED), now());
         assert_eq!((&m["autoscale"]["can_pause"], &m["autoscale"]["can_set_max"]), (&json!(true), &json!(false)));
     }
 

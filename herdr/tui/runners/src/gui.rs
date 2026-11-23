@@ -101,7 +101,7 @@ fn source(bin: Option<PathBuf>) -> Source {
 }
 
 pub fn view(_args: &Value, _doc: &dyn Fn(&str) -> Value) -> Value {
-    model::model(source(bin()), &state_dir(), Utc::now())
+    model::model(source(bin()), None, &state_dir(), Utc::now(), &chrono::Local)
 }
 
 /// Runs an autoscale command for the view: `pause`, `resume`, `set-max` (one count) and `reset-max`; other actions are not ours.
@@ -265,7 +265,7 @@ mod tests {
         let fake = Fake::live();
         let src = source(Some(fake.bin.clone()));
         assert!(matches!(src, Source::Live(..)));
-        let view = model(src, Path::new("/home/me/.local/state/ci-runners"), chrono::Utc::now());
+        let view = model(src, None, Path::new("/home/me/.local/state/ci-runners"), chrono::Utc::now(), &chrono::Local);
         assert_eq!(view["state"], "live");
         assert_eq!(fake.calls("status --json --offline"), 1);
     }

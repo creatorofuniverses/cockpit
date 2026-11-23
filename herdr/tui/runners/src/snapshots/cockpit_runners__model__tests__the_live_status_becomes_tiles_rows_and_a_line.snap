@@ -30,6 +30,393 @@ expression: "serde_json::to_string_pretty(&live(fixture())).unwrap()"
     "tone": "warning"
   },
   "error": null,
+  "history": {
+    "charts": {
+      "24h": {
+        "kind": "bar",
+        "labels": [
+          "22:00",
+          "23:00",
+          "00:00",
+          "01:00",
+          "02:00",
+          "03:00",
+          "04:00",
+          "05:00",
+          "06:00",
+          "07:00",
+          "08:00",
+          "09:00",
+          "10:00",
+          "11:00",
+          "12:00",
+          "13:00",
+          "14:00",
+          "15:00",
+          "16:00",
+          "17:00",
+          "18:00",
+          "19:00",
+          "20:00",
+          "21:00"
+        ],
+        "notes": [
+          "no data",
+          null,
+          "covered 73% · created 2 auto · 1 manual",
+          null,
+          "created 1 auto",
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "series": [
+          {
+            "key": "busy",
+            "line": false,
+            "name": "Busy",
+            "values": [
+              null,
+              1.0,
+              2.0,
+              3.0,
+              0.0,
+              1.0,
+              2.0,
+              3.0,
+              0.0,
+              1.0,
+              2.0,
+              3.0,
+              0.0,
+              1.0,
+              2.0,
+              3.0,
+              0.0,
+              1.0,
+              2.0,
+              3.0,
+              0.0,
+              1.0,
+              2.0,
+              3.0
+            ]
+          },
+          {
+            "key": "idle",
+            "line": false,
+            "name": "Idle",
+            "values": [
+              null,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "booting",
+            "line": false,
+            "name": "Booting",
+            "values": [
+              null,
+              1.0,
+              0.0,
+              1.0,
+              0.0,
+              1.0,
+              0.0,
+              1.0,
+              0.0,
+              1.0,
+              0.0,
+              1.0,
+              0.0,
+              1.0,
+              0.0,
+              1.0,
+              0.0,
+              1.0,
+              0.0,
+              1.0,
+              0.0,
+              1.0,
+              0.0,
+              1.0
+            ]
+          },
+          {
+            "key": "waiting",
+            "line": true,
+            "name": "Waiting jobs",
+            "values": [
+              null,
+              null,
+              2.0,
+              3.0,
+              4.0,
+              5.0,
+              0.0,
+              1.0,
+              2.0,
+              3.0,
+              4.0,
+              5.0,
+              0.0,
+              1.0,
+              2.0,
+              3.0,
+              4.0,
+              5.0,
+              0.0,
+              1.0,
+              2.0,
+              3.0,
+              4.0,
+              5.0
+            ]
+          }
+        ],
+        "stacked": true
+      },
+      "7d": {
+        "kind": "bar",
+        "labels": [
+          "Mon 16",
+          "Tue 17",
+          "Wed 18",
+          "Thu 19",
+          "Fri 20",
+          "Sat 21",
+          "today"
+        ],
+        "notes": [
+          "no data",
+          "≈ 26 ₽ · covered 73%",
+          "≈ 26 ₽",
+          "≈ 26 ₽",
+          "≈ 26 ₽",
+          "≈ 26 ₽",
+          "≈ 26 ₽"
+        ],
+        "series": [
+          {
+            "key": "busy",
+            "line": false,
+            "name": "Busy",
+            "values": [
+              null,
+              3.0,
+              3.0,
+              3.0,
+              3.0,
+              3.0,
+              3.0
+            ]
+          },
+          {
+            "key": "idle",
+            "line": false,
+            "name": "Idle",
+            "values": [
+              null,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "key": "booting",
+            "line": false,
+            "name": "Booting",
+            "values": [
+              null,
+              2.0,
+              2.0,
+              2.0,
+              2.0,
+              2.0,
+              2.0
+            ]
+          },
+          {
+            "key": "stopped",
+            "line": false,
+            "name": "Stopped",
+            "values": [
+              null,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          }
+        ],
+        "stacked": true
+      }
+    },
+    "empty": false,
+    "notes": [
+      {
+        "text": "≈ at 4.34 ₽ per started server-hour",
+        "tone": null
+      }
+    ],
+    "windows": {
+      "24h": {
+        "notes": [
+          {
+            "text": "data covers 73% of the period",
+            "tone": null
+          },
+          {
+            "text": "partly estimated from snapshots",
+            "tone": null
+          },
+          {
+            "text": "some server lifetimes are bounded",
+            "tone": null
+          }
+        ],
+        "tiles": [
+          {
+            "hint": "3 auto · 1 manual · 1 still running",
+            "id": "launched",
+            "label": "Launched",
+            "tone": null,
+            "value": 4
+          },
+          {
+            "hint": null,
+            "id": "took",
+            "label": "Took jobs",
+            "tone": null,
+            "value": 2
+          },
+          {
+            "hint": "2 idle without a job · 0 never online · 1 unclear",
+            "id": "wasted",
+            "label": "Wasted",
+            "tone": "warning",
+            "value": 2
+          },
+          {
+            "hint": "13 server-hours · 30 ₽ idle",
+            "id": "spent",
+            "label": "Spent",
+            "tone": null,
+            "value": "≈ 56 ₽"
+          },
+          {
+            "hint": "worst 3m47s",
+            "id": "online",
+            "label": "To online",
+            "tone": null,
+            "value": "2m50s"
+          },
+          {
+            "hint": "threshold met 1 of 14 passes with demand · blocked isolation 6m · errors 2 passes · 2 episodes · paused 30m · off 15m",
+            "id": "autoscale",
+            "label": "Autoscale",
+            "tone": "warning",
+            "value": 3
+          }
+        ]
+      },
+      "7d": {
+        "notes": [
+          {
+            "text": "data covers 80% of the period",
+            "tone": null
+          }
+        ],
+        "tiles": [
+          {
+            "hint": "8 auto · 2 manual · 1 builder · 1 still running",
+            "id": "launched",
+            "label": "Launched",
+            "tone": null,
+            "value": 11
+          },
+          {
+            "hint": null,
+            "id": "took",
+            "label": "Took jobs",
+            "tone": null,
+            "value": 6
+          },
+          {
+            "hint": "2 idle without a job · 0 never online · 1 unclear",
+            "id": "wasted",
+            "label": "Wasted",
+            "tone": "warning",
+            "value": 2
+          },
+          {
+            "hint": "31.5 server-hours · 30 ₽ idle",
+            "id": "spent",
+            "label": "Spent",
+            "tone": null,
+            "value": "≈ 137 ₽"
+          },
+          {
+            "hint": "worst 3m47s",
+            "id": "online",
+            "label": "To online",
+            "tone": null,
+            "value": "2m50s"
+          },
+          {
+            "hint": "threshold met 1 of 14 passes with demand · blocked isolation 6m · errors 2 passes · 2 episodes · paused 30m · off 15m",
+            "id": "autoscale",
+            "label": "Autoscale",
+            "tone": "warning",
+            "value": 3
+          }
+        ]
+      }
+    }
+  },
   "line": {
     "text": "3 servers · 1 busy · 2 waiting",
     "tone": "warning"
