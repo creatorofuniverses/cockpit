@@ -1,4 +1,4 @@
-// Charts for the show view, drawn natively: line, area and bar charts (stacked, to 100%, horizontal) with a value axis,
+// Native line, area and bar charts with a value axis, including stacked bars with optional overlay lines,
 // sparse x labels, a legend that hides a series and a hovered row's values; donuts with their legend; figure tiles.
 
 import { div, PathBuilder, Background } from "gpui-kit";
@@ -78,18 +78,23 @@ function sparse(count, n) {
  * The rows of `win` and the series as drawn: coloured by their place in the model (a hidden one keeps its colour), the
  * values turned into shares of their row when `percent`, and `base` (where each shown value starts) when stacked.
  */
-function prepared(model, win, hidden) {
+export function prepared(model, win, hidden) {
   const all = model.labels ?? [];
   const start = win?.start ?? 0, len = win?.len ?? all.length;
   const labels = all.slice(start, start + len);
-  const series = (model.series ?? []).map((s, i) => ({ ...s, color: SERIES[i % SERIES.length], raw: (s.values ?? []).slice(start, start + len) }));
+  const overlays = model.kind === "bar" && !model.horizontal;
+  const series = (model.series ?? []).map((s, i) => ({
+    ...s, line: overlays && s.line === true, color: s.color ?? SERIES[i % SERIES.length],
+    raw: (s.values ?? []).slice(start, start + len),
+  }));
   const shown = series.filter((s) => !hidden.has(s.name));
   const stacked = Boolean(model.stacked || model.percent) && model.kind !== "line";
-  const totals = labels.map((_, i) => shown.reduce((sum, s) => sum + (finite(s.raw[i]) ? s.raw[i] : 0), 0));
-  for (const s of series) s.values = model.percent ? s.raw.map((v, i) => (finite(v) && totals[i] ? (v / totals[i]) * 100 : null)) : s.raw;
+  const parts = shown.filter((s) => !s.line);
+  const totals = labels.map((_, i) => parts.reduce((sum, s) => sum + (finite(s.raw[i]) ? s.raw[i] : 0), 0));
+  for (const s of series) s.values = model.percent && !s.line ? s.raw.map((v, i) => (finite(v) && totals[i] ? (v / totals[i]) * 100 : null)) : s.raw;
   if (stacked) {
     const floor = labels.map(() => 0);
-    for (const s of shown) {
+    for (const s of parts) {
       s.base = floor.slice();
       s.values.forEach((v, i) => finite(v) && (floor[i] += v));
     }
@@ -108,14 +113,16 @@ function Legend(id, series, hidden, onToggle, ml) {
       .text_color(off ? k.dim : k.mutedFg).hover((st) => st.bg(k.accent))
       .when(Boolean(onToggle), (e) => e.on_click((_e, cx) => onToggle(s.name, cx)))
       .tooltip(off ? `Show ${s.name}` : `Hide ${s.name}`)
-      .child(div().size(8).rounded(2).bg(off ? alpha(s.color, 0.3) : s.color))
+      .child(div().w(s.line ? 10 : 8).h(s.line ? 2 : 8).rounded(2).bg(off ? alpha(s.color, 0.3) : s.color))
       .child(s.name);
   }));
 }
 
 /** The hovered row's card: its label, each shown series' value (and share), the total when stacked. */
-function Tip(label, shown, at, { percent: pct, totals, stacked, unit = { show: compact } }) {
+function Tip(label, shown, at, { percent: pct, totals, stacked, note, completeTotal, unit = { show: compact } }) {
   const k = tokens();
+  const parts = shown.filter((s) => !s.line);
+  const showTotal = stacked && parts.length > 1 && (!completeTotal || parts.every((s) => finite(s.values[at])));
   const line = (color, name, value) =>
     h_flex().gap(6).items_center().text_size(TEXT.xs)
       .child(div().size(8).rounded(2).when(Boolean(color), (e) => e.bg(color)))
@@ -123,13 +130,14 @@ function Tip(label, shown, at, { percent: pct, totals, stacked, unit = { show: c
       .child(div().font_medium().text_color(k.foreground).child(value));
   return v_flex().gap(4).p(8).min_w(150).rounded(RADIUS.md).border_1().border_color(k.border).bg(k.popover).shadow_md()
     .child(div().text_size(TEXT.xs).font_semibold().text_color(k.foreground).child(String(label ?? "")))
-    .children(shown.map((s) => line(s.color, s.name, pct ? `${unit.show(s.raw[at])} · ${percent(s.values[at])}` : unit.show(s.values[at]))))
-    .when(stacked && shown.length > 1, (e) => e.child(line(null, "Total", unit.show(totals[at]))));
+    .children(shown.map((s) => line(s.color, s.name, pct && !s.line ? `${unit.show(s.raw[at])} · ${percent(s.values[at])}` : unit.show(s.values[at]))))
+    .when(showTotal, (e) => e.child(line(null, "Total", unit.show(totals[at]))))
+    .when(typeof note === "string", (e) => e.child(div().text_size(TEXT.xs).text_color(k.mutedFg).child(note)));
 }
 
 /**
  * A chart: model { kind: "line" | "area" | "bar" | "donut", x, labels, series: [{name, values}], stacked, percent,
- * horizontal, show_values } over the rows of `window` ({start, len}, all when null), `width` its room. `hover` is the
+ * horizontal, show_values, notes } with optional series colors and bar overlay lines. It draws the rows of `window` ({start, len}, all when null), `width` its room. `hover` is the
  * hovered row (absolute), `hidden` a Set of hidden series names; `onHover(i, cx)` and `onToggle(name, cx)` report the
  * pointer.
  */
@@ -139,20 +147,46 @@ export function Chart(id, model, opts = {}) {
   return Plot(id, model, opts);
 }
 
+/** The overlay paths and dots through consecutive measured rows. */
+function overlay(series, xOf, yOf, z) {
+  const marks = [];
+  const values = series.values;
+  let stroke = PathBuilder.stroke(2 * z);
+  let connected = false;
+  for (const [i, value] of values.entries()) {
+    if (!finite(value)) continue;
+    const x = `${xOf(i)}%`, y = `${yOf(value)}%`;
+    if (finite(values[i - 1])) {
+      stroke = stroke.line_to(x, y);
+      connected = true;
+    } else if (finite(values[i + 1])) {
+      stroke = stroke.move_to(x, y);
+    } else {
+      marks.push(div().absolute().left(x).top(y).ml(-3).mt(-3).size(6).rounded_full().bg(series.color));
+    }
+  }
+  if (connected) marks.unshift(window.paint_path(stroke.build(), series.color).absolute().inset_0());
+  return marks;
+}
+
 function Plot(id, model, { height = 180, width = 480, hover = null, hidden = new Set(), window: win = null, onHover, onToggle } = {}) {
   const k = tokens();
   const z = settings().zoom ?? 1;
   const { labels, series, shown, stacked, totals, start } = prepared(model, win, hidden);
-  const top = (s, i) => (stacked ? s.base[i] + s.values[i] : s.values[i]);
+  const top = (s, i) => (stacked && !s.line ? s.base[i] + s.values[i] : s.values[i]);
   const values = shown.flatMap((s) => s.values.map((v, i) => (finite(v) ? top(s, i) : NaN))).filter(finite);
-  if (!labels.length || !values.length) return empty(k);
+  const hasNotes = Array.isArray(model.notes);
+  if (!labels.length || (!values.length && !hasNotes)) return empty(k);
   const bars = model.kind === "bar";
   const area = model.kind === "area";
-  const [vmin, vmax] = [Math.min(...values), Math.max(...values)];
+  const [vmin, vmax] = values.length ? [Math.min(...values), Math.max(...values)] : [0, 0];
   const unit = unitOf(model.unit, vmax);
   // Bars, areas and stacks start at zero; a line too, unless its values sit far from it.
   const fromZero = bars || area || stacked || (vmin >= 0 && vmin < vmax / 2);
-  const yt = model.percent ? [0, 25, 50, 75, 100] : ticks(fromZero ? Math.min(0, vmin) : vmin, vmax);
+  const overlayOutsidePercent = (vmin < 0 || vmax > 100) && shown.some((s) => s.line);
+  const lower = fromZero ? Math.min(0, vmin) : vmin;
+  const upper = model.percent ? Math.max(100, vmax) : vmax;
+  const yt = model.percent && !overlayOutsidePercent ? [0, 25, 50, 75, 100] : ticks(lower, upper);
   const [y0, y1] = [yt[0], yt[yt.length - 1]];
   const yOf = (v) => 100 - ((v - y0) / (y1 - y0 || 1)) * 100;
   const n = labels.length;
@@ -168,22 +202,26 @@ function Plot(id, model, { height = 180, width = 480, hover = null, hidden = new
   let plot = div().relative().flex_1().min_w(0).h(height).child(window.paint_path(grid.build(), alpha(k.border, 0.7)).absolute().inset_0());
 
   if (bars) {
+    const parts = shown.filter((s) => !s.line);
     const px = (v) => (finite(v) ? Math.max(1, (Math.abs(v) / (y1 - y0 || 1)) * height) : 0);
     const groups = labels.map((_, i) => {
       const lit = at === null || at === i;
       const paint = (s) => (lit ? s.color : alpha(s.color, 0.45));
       // A stack is one column, its first series at the bottom, 2px of surface between segments.
       const column = stacked
-        ? [v_flex().flex_1().max_w(56).h_full().justify_end().gap(2).children(shown.slice().reverse().filter((s) => finite(s.values[i]) && s.values[i] > 0)
+        ? [v_flex().flex_1().max_w(56).h_full().justify_end().gap(2).children(parts.slice().reverse().filter((s) => finite(s.values[i]) && s.values[i] > 0)
             .map((s, j) => div().w_full().flex_none().h(Math.max(1, px(s.values[i]) - 2)).when(j === 0, (e) => e.rounded_t(RADIUS.sm)).bg(paint(s))))]
-        : shown.map((s) => div().flex_1().max_w(56).h(px(s.values[i])).rounded_t(RADIUS.sm).bg(paint(s)));
+        : parts.map((s) => div().flex_1().max_w(56).h(px(s.values[i])).rounded_t(RADIUS.sm).bg(paint(s)));
       return h_flex().flex_1().min_w(0).h_full().items_end().justify_center().gap(2).px(n > 24 ? 1 : 4).children(column);
     });
     plot = plot.child(h_flex().absolute().inset_0().children(groups));
+    for (const series of shown) {
+      if (series.line) plot = plot.children(overlay(series, xOf, yOf, z));
+    }
     if (labelled) {
       for (let i = 0; i < n; i++) {
         if (stacked && !model.percent && totals[i]) plot = plot.child(valueAt(i, totals[i], unit.show(totals[i])));
-        else if (!stacked && shown.length === 1 && finite(shown[0].values[i])) plot = plot.child(valueAt(i, shown[0].values[i], unit.show(shown[0].values[i])));
+        else if (!stacked && parts.length === 1 && finite(parts[0].values[i])) plot = plot.child(valueAt(i, parts[0].values[i], unit.show(parts[0].values[i])));
       }
     }
   } else {
@@ -230,7 +268,7 @@ function Plot(id, model, { height = 180, width = 480, hover = null, hidden = new
 
   if (at !== null) {
     const left = xOf(at) > 60;
-    const tip = Tip(labels[at], shown, at, { percent: model.percent, totals, stacked, unit });
+    const tip = Tip(labels[at], shown, at, { percent: model.percent, totals, stacked, unit, completeTotal: hasNotes, note: model.notes?.[start + at] });
     plot = plot.child(div().absolute().top(4).when(left, (e) => e.right(`${100 - xOf(at) + 2}%`)).when(!left, (e) => e.left(`${xOf(at) + 2}%`)).child(tip));
   }
 
@@ -290,7 +328,10 @@ function Rows(id, model, { width = 480, hover = null, hidden = new Set(), window
       .child(h_flex().flex_1().min_w(0).items_center().gap(8).child(bar)
         .when(Boolean(text), (e) => e.child(div().flex_none().whitespace_nowrap().text_size(TEXT.xs).font_medium().text_color(k.foreground).child(text))));
     if (onHover) row = row.on_hover((on, cx) => onHover(on ? start + i : null, cx));
-    if (at === i && shown.length > 1) row = row.child(div().absolute().top(thick + 8).right(0).child(Tip(label, shown, i, { percent: model.percent, totals, stacked })));
+    const note = model.notes?.[start + i];
+    if (at === i && (shown.length > 1 || typeof note === "string")) {
+      row = row.child(div().absolute().top(thick + 8).right(0).child(Tip(label, shown, i, { percent: model.percent, totals, stacked, note, completeTotal: Array.isArray(model.notes) })));
+    }
     return row;
   });
   return v_flex().id(id).gap(2).w_full()
