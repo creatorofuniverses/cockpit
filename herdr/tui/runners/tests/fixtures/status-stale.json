@@ -49,6 +49,28 @@
     "pins": "match",
     "pins_checked_at": "2026-11-22T18:40:02Z"
   },
+  "limits": {
+    "autoscale": true,
+    "paused": false,
+    "paused_by": null,
+    "paused_at": null,
+    "pause_reason": null,
+    "max_servers": 3,
+    "max_servers_source": "config",
+    "max_vms": 6,
+    "min_queued": 3,
+    "max_wait_minutes": 10,
+    "last_decision": {
+      "at": "2026-11-22T18:59:40Z",
+      "waiting": 5,
+      "oldest_s": 740,
+      "free": 0,
+      "booting": 1,
+      "created": 2,
+      "blocked": null,
+      "error": null
+    }
+  },
   "warnings": [
     {
       "kind": "tick-stale",

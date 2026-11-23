@@ -3,6 +3,24 @@ source: runners/src/model.rs
 expression: "serde_json::to_string_pretty(&live(fixture())).unwrap()"
 ---
 {
+  "autoscale": {
+    "can_pause": true,
+    "can_set_max": true,
+    "last": {
+      "ago": "2m",
+      "text": "5 waiting → created 2",
+      "tone": null
+    },
+    "max": 3,
+    "max_source": "config",
+    "max_vms": 6,
+    "on": true,
+    "pause_reason": null,
+    "paused": false,
+    "paused_ago": null,
+    "paused_by": null,
+    "trigger": "≥3 waiting or 10m"
+  },
   "badge": {
     "count": 1,
     "tone": "warning"

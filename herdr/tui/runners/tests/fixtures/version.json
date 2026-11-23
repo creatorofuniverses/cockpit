@@ -1,1 +1,1 @@
-{"version": "dev", "commit": "0000000000000000000000000000000000000000", "modified": false, "json_v": 1, "features": ["status-json", "status-offline", "version-json"]}
+{"version": "dev", "commit": "0000000000000000000000000000000000000000", "modified": false, "json_v": 1, "features": ["status-json", "status-offline", "version-json", "pause", "set-max"]}

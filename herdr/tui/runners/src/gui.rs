@@ -79,13 +79,13 @@ fn first_line(text: &str) -> String {
 /// The status as ci-runners gives it now, or why there is none; an old ci-runners is never asked for it.
 fn source(bin: Option<PathBuf>) -> Source {
     let Some(bin) = bin else { return Source::Absent };
-    match features(&bin) {
+    let features = match features(&bin) {
         Err(e) => return Source::Down(e),
         Ok(features) if !features.iter().any(|f| f == "status-offline") => {
             return Source::Outdated("ci-runners on this machine has no status --json --offline; update it".into());
         }
-        Ok(_) => {}
-    }
+        Ok(features) => features,
+    };
     let out = match call(&bin, &["status", "--json", "--offline"], "ci-runners status") {
         Ok(out) => out,
         Err(e) => return Source::Down(e),
@@ -94,7 +94,9 @@ fn source(bin: Option<PathBuf>) -> Source {
         let why = first_line(&String::from_utf8_lossy(&out.stderr));
         return Source::Down(if why.is_empty() { format!("ci-runners status exited {}", out.status.code().unwrap_or(1)) } else { why });
     }
-    serde_json::from_slice(&out.stdout).map(Source::Live).unwrap_or_else(|e| Source::Down(format!("ci-runners status printed no JSON: {e}")))
+    serde_json::from_slice(&out.stdout)
+        .map(|status| Source::Live(status, features))
+        .unwrap_or_else(|e| Source::Down(format!("ci-runners status printed no JSON: {e}")))
 }
 
 pub fn view(_args: &Value, _doc: &dyn Fn(&str) -> Value) -> Value {
@@ -199,7 +201,7 @@ mod tests {
     fn a_live_binary_gives_its_status() {
         let fake = Fake::live();
         let src = source(Some(fake.bin.clone()));
-        assert!(matches!(src, Source::Live(_)));
+        assert!(matches!(src, Source::Live(..)));
         let view = model(src, Path::new("/home/me/.local/state/ci-runners"), chrono::Utc::now());
         assert_eq!(view["state"], "live");
         assert_eq!(fake.calls("status --json --offline"), 1);

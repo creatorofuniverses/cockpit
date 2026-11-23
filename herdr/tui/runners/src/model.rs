@@ -18,8 +18,8 @@ pub enum Source {
     Outdated(String),
     /// ci-runners is installed but does not answer, and why.
     Down(String),
-    /// The status, as `ci-runners status --json --offline` gives it.
-    Live(Value),
+    /// The status, as `ci-runners status --json --offline` gives it, and the features the binary declares.
+    Live(Value, Vec<String>),
 }
 
 fn text(v: &Value) -> &str {
@@ -129,12 +129,42 @@ fn server(s: &Value, warned: bool, runners_known: bool, generated: DateTime<Utc>
     })
 }
 
+/// The autoscale strip's model from the service's `limits`: its switches, the max, the trigger in words and the last decision.
+fn autoscale(limits: &Value, features: &[String], generated: DateTime<Utc>) -> Value {
+    let has = |f: &str| features.iter().any(|x| x == f);
+    let count = |v: &Value| v.as_u64().unwrap_or(0);
+    let d = &limits["last_decision"];
+    let (waiting, created) = (count(&d["waiting"]), count(&d["created"]));
+    let (words, tone) = if !d.is_object() {
+        ("no decisions yet".to_string(), None)
+    } else if let Some(e) = d["error"].as_str().filter(|e| !e.is_empty()) {
+        (format!("error: {e}"), Some("warning"))
+    } else if let Some(b) = d["blocked"].as_str().filter(|b| !b.is_empty()) {
+        (if waiting > 0 { format!("blocked: {b}, {waiting} waiting") } else { format!("blocked: {b}") }, Some("warning"))
+    } else if created > 0 {
+        (format!("{waiting} waiting → created {created}"), None)
+    } else if waiting == 0 {
+        ("queue empty".to_string(), None)
+    } else {
+        (format!("{waiting} waiting"), None)
+    };
+    json!({
+        "on": limits["autoscale"] == true,
+        "paused": limits["paused"] == true, "paused_by": limits["paused_by"],
+        "paused_ago": since(&limits["paused_at"], generated).map(span), "pause_reason": limits["pause_reason"],
+        "max": limits["max_servers"], "max_source": limits["max_servers_source"], "max_vms": limits["max_vms"],
+        "trigger": format!("≥{} waiting or {}m", count(&limits["min_queued"]), count(&limits["max_wait_minutes"])),
+        "last": {"text": words, "ago": since(&d["at"], generated).map(span), "tone": tone},
+        "can_pause": has("pause"), "can_set_max": has("set-max"),
+    })
+}
+
 fn build(source: Source, watched: &Path, now: DateTime<Utc>) -> Value {
-    let status = match source {
+    let (status, features) = match source {
         Source::Absent => return json!({"state": "absent", "error": null, "line": null, "badge": null}),
         Source::Outdated(why) => return unusable("outdated", why, "update ci-runners"),
         Source::Down(why) => return unusable("down", why, "ci-runners does not answer"),
-        Source::Live(status) => status,
+        Source::Live(status, features) => (status, features),
     };
     if status["v"].as_u64() != Some(JSON_V) {
         return unusable("newer", "ci-runners answers in a newer format than this cockpit reads".into(), "update cockpit");
@@ -194,6 +224,10 @@ fn build(source: Source, watched: &Path, now: DateTime<Utc>) -> Value {
     if let Some(q) = queued {
         line.push_str(&format!(" · {q} queued"));
     }
+    let autoscale = if status["limits"].is_object() { autoscale(&status["limits"], &features, generated) } else { Value::Null };
+    if autoscale["on"] == true && autoscale["paused"] == true {
+        line.push_str(" · autoscale paused");
+    }
     let (state, line, badge) = if never_ran {
         ("no-tick", json!({"text": "tick has not run", "tone": "warning"}), json!({"count": "!", "tone": "warning"}))
     } else {
@@ -203,7 +237,7 @@ fn build(source: Source, watched: &Path, now: DateTime<Utc>) -> Value {
     };
     json!({
         "state": state, "error": null, "line": line, "badge": badge, "tick": tick_row,
-        "warnings": warnings, "tiles": tiles, "servers": servers,
+        "warnings": warnings, "tiles": tiles, "servers": servers, "autoscale": autoscale,
     })
 }
 
@@ -230,8 +264,12 @@ mod tests {
         serde_json::from_str(include_str!("../tests/fixtures/status-live.json")).unwrap()
     }
 
+    fn features() -> Vec<String> {
+        vec!["pause".into(), "set-max".into()]
+    }
+
     fn live(status: Value) -> Value {
-        model(Source::Live(status), Path::new(WATCHED), now())
+        model(Source::Live(status, features()), Path::new(WATCHED), now())
     }
 
     fn small(drain: bool, role: &str, status: &str, runner: Value) -> Value {
@@ -358,7 +396,7 @@ mod tests {
 
     #[test]
     fn a_trailing_slash_on_the_state_dir_is_the_same_folder() {
-        let m = model(Source::Live(fixture()), Path::new(&format!("{WATCHED}/")), now());
+        let m = model(Source::Live(fixture(), features()), Path::new(&format!("{WATCHED}/")), now());
         assert!(m["warnings"].as_array().unwrap().iter().all(|w| w["kind"] != "state-dir"));
     }
 
@@ -415,19 +453,85 @@ mod tests {
 
     #[test]
     fn times_count_from_the_service_s_answer_not_cockpit_s_clock() {
-        let a = model(Source::Live(fixture()), Path::new(WATCHED), at("2026-11-22T19:01:05Z"));
-        let b = model(Source::Live(fixture()), Path::new(WATCHED), at("2026-11-23T09:00:00Z"));
+        let a = model(Source::Live(fixture(), features()), Path::new(WATCHED), at("2026-11-22T19:01:05Z"));
+        let b = model(Source::Live(fixture(), features()), Path::new(WATCHED), at("2026-11-23T09:00:00Z"));
         assert_eq!(a, b);
         let mut status = fixture();
         status["generated_at"] = Value::Null;
-        assert_eq!(model(Source::Live(status), Path::new(WATCHED), at("2026-11-22T19:05:13Z"))["tick"]["ago"], "4m");
+        assert_eq!(model(Source::Live(status, features()), Path::new(WATCHED), at("2026-11-22T19:05:13Z"))["tick"]["ago"], "4m");
     }
 
     #[test]
     fn a_different_state_dir_warns() {
-        let m = model(Source::Live(fixture()), Path::new("/elsewhere"), now());
+        let m = model(Source::Live(fixture(), features()), Path::new("/elsewhere"), now());
         let kinds: Vec<&str> = m["warnings"].as_array().unwrap().iter().map(|w| w["kind"].as_str().unwrap()).collect();
         assert_eq!(kinds, ["reap-overdue", "state-dir"]);
         assert_eq!(m["badge"]["count"], 2);
+    }
+
+    fn decision(mutate: impl FnOnce(&mut Value)) -> Value {
+        let mut status = fixture();
+        mutate(&mut status["limits"]["last_decision"]);
+        live(status)["autoscale"]["last"].clone()
+    }
+
+    #[test]
+    fn autoscale_reads_the_service_s_limits() {
+        assert_eq!(
+            live(fixture())["autoscale"],
+            json!({
+                "on": true, "paused": false, "paused_by": null, "paused_ago": null, "pause_reason": null,
+                "max": 3, "max_source": "config", "max_vms": 6, "trigger": "≥3 waiting or 10m",
+                "last": {"text": "5 waiting → created 2", "ago": "2m", "tone": null},
+                "can_pause": true, "can_set_max": true
+            })
+        );
+    }
+
+    #[test]
+    fn no_limits_no_autoscale() {
+        let mut status = fixture();
+        status["limits"] = Value::Null;
+        assert_eq!(live(status.clone())["autoscale"], Value::Null);
+        status.as_object_mut().unwrap().remove("limits");
+        assert_eq!(live(status)["autoscale"], Value::Null);
+        let m = model(Source::Live(fixture(), vec![]), Path::new(WATCHED), now());
+        assert_eq!((&m["autoscale"]["can_pause"], &m["autoscale"]["can_set_max"]), (&json!(false), &json!(false)));
+        let m = model(Source::Live(fixture(), vec!["pause".into()]), Path::new(WATCHED), now());
+        assert_eq!((&m["autoscale"]["can_pause"], &m["autoscale"]["can_set_max"]), (&json!(true), &json!(false)));
+    }
+
+    #[test]
+    fn last_decision_words() {
+        assert_eq!(decision(|d| *d = Value::Null), json!({"text": "no decisions yet", "ago": null, "tone": null}));
+        let error = decision(|d| d["error"] = json!("create failed: quota"));
+        assert_eq!((&error["text"], &error["tone"]), (&json!("error: create failed: quota"), &json!("warning")));
+        let blocked = decision(|d| {
+            d["blocked"] = json!("isolation");
+            d["waiting"] = json!(4);
+            d["created"] = json!(0);
+        });
+        assert_eq!((&blocked["text"], &blocked["tone"]), (&json!("blocked: isolation, 4 waiting"), &json!("warning")));
+        let idle = decision(|d| {
+            d["waiting"] = json!(0);
+            d["created"] = json!(0);
+        });
+        assert_eq!((&idle["text"], &idle["tone"]), (&json!("queue empty"), &Value::Null));
+        let waiting = decision(|d| d["created"] = json!(0));
+        assert_eq!(waiting["text"], "5 waiting");
+    }
+
+    #[test]
+    fn a_pause_shows_on_home() {
+        let mut status = fixture();
+        status["limits"]["paused"] = json!(true);
+        status["limits"]["paused_by"] = json!("cockpit");
+        status["limits"]["paused_at"] = json!("2026-11-22T18:56:40Z");
+        let m = live(status.clone());
+        assert_eq!(m["autoscale"]["paused_ago"], "5m");
+        assert_eq!(m["autoscale"]["paused_by"], "cockpit");
+        assert!(m["line"]["text"].as_str().unwrap().ends_with(" · autoscale paused"));
+        status["limits"]["autoscale"] = json!(false);
+        assert!(!live(status)["line"]["text"].as_str().unwrap().contains("autoscale paused"));
     }
 }
