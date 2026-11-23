@@ -1594,11 +1594,10 @@ its `session`, matched against the `agents` view's rows.
 
 The Runners space shows the CI runner servers that the `ci-runners` service keeps. `cockpit_runners::gui` asks
 `ci-runners version --json` first and calls `ci-runners status --json --offline` only when its `features` list
-`status-offline`, each with a 5 second limit. It rebuilds when `~/.local/state/ci-runners` changes and every 20 seconds.
-It makes no network calls and calls nothing that is not in `features`; an older service reads as `outdated`, and a
-`status` reply with a `v` it does not know reads as `newer`. Cockpit adds no thresholds of its own: problems come only
-from the service's `warnings` (a stopped tick is the `tick-stale` warning). The view changes nothing about the servers; its only
-actions are the autoscale controls below.
+`status-offline`. With `stats-offline`, it calls `ci-runners stats --json --offline` alongside status. Each request has
+a five-second limit. It rebuilds when `~/.local/state/ci-runners` changes and every 20 seconds. The reads use local data.
+An older service reads as `outdated`. A `status` reply with an unrecognized `v` reads as `newer`. The service's
+`warnings` report problems such as a stopped tick (`tick-stale`). The view's actions control autoscaling.
 The space has no TUI half and no place in the config's `spaces`: its sidebar icon and Home line show wherever the hub
 finds ci-runners (`CI_RUNNERS_BIN`, then `PATH`, then `~/.local/bin/ci-runners`), and nothing is created on a machine
 without it.
@@ -1607,12 +1606,14 @@ without it.
 {
   "state": "absent" | "outdated" | "newer" | "no-tick" | "down" | "live",   // no-tick: tick.last_at is null or missing
   "error": "…" | null,                       // down / outdated / newer: why, for a person
-  "line":  {"text": "2 servers · 1 busy · 3 queued", "tone": "warning" | null} | null,   // null only when absent
+  "line":  {"text": "3 servers · 1 busy · 2 waiting", "tone": "warning" | null} | null,   // null only when absent
   "badge": {"count": 2 | "!", "tone": "warning"} | null,
   "tick":  {"ago": "1m", "ok": true, "errors": 0, "stale": false, "error_text": "…" | null} | null,
   "warnings": [{"kind": "tick-stale", "text": "no successful tick for > 5 min", "object": null}],
-  "tiles": {"servers": 3, "runners": 2, "busy": 1, "queued": 3 | null, "queue_ago": "4m" | null, "queue_stale": false, "cost": "≈ 53 ₽" | null},
+  "tiles": {"servers": 3, "runners": 2, "busy": 1, "queued": 2 | null, "queue_label": "Waiting" | "Queued", "queue_ago": "4m" | null, "queue_stale": false, "cost": "≈ 53 ₽" | null},
   "autoscale": {                             // null when the status has no `limits` object
+    "state": "on" | "blocked" | "error" | "paused" | "off",
+    "waiting": {"count": 2 | null},          // omitted when queue.waiting_heavy is absent
     "on": true,                              // limits.autoscale
     "paused": false, "paused_by": null | "cockpit", "paused_ago": "5m" | null, "pause_reason": null | "…",
     "max": 3, "max_source": "config" | "set-max", "max_vms": 6,
@@ -1620,6 +1621,9 @@ without it.
     "last": {"text": "4 waiting → created 1", "ago": "2m" | null, "tone": "warning" | null},   // the last decision in words
     "can_pause": true, "can_set_max": true   // the service's `features` list pause and set-max
   } | null,
+  "history": { "windows": {"24h": {"tiles": [], "notes": []}, "7d": {"tiles": [], "notes": []}},
+               "charts": {"24h": { /* Chart */ }, "7d": { /* Chart */ }}, "notes": [], "empty": false }
+             | {"empty": true, "notes": []} | {"error": "…"} | null,
   "servers": [{
     "id": "…", "name": "sel-ci-demo2", "role": "runner" | "image-builder" | null, "status": "ACTIVE", "drain": false,
     "phase": "busy" | "idle" | "booting" | "draining" | "building" | "unowned" | "unknown" | "other",
@@ -1635,10 +1639,10 @@ without it.
 The phase follows the service's fields: a server with a `null` role is `unowned` (ours, but the tick leaves it alone),
 `drain` is `draining`, the `image-builder` role is `building`, a server without a runner while `sources.runners.ok` is false
 is `unknown`, a `busy` runner is `busy`, an `online` one `idle`, and an `ACTIVE` server with no online runner is `booting`. The line reads
-`N servers · B busy`, plus `· Q queued` when the queue is polled, and turns yellow while `warnings` is not empty; the
-other states read `update ci-runners`, `update cockpit`, `tick has not run`, `ci-runners does not answer` and, for a `v: 1`
-reply without a `servers` array or a `tick` object (state `down`, error "ci-runners status lacks servers; cockpit and
-ci-runners disagree on the format"), `ci-runners status is not understood`. `no-tick` means `tick.last_at` is null or missing:
+`N servers · B busy` and adds `· Q waiting` from `queue.waiting_heavy` or `· Q queued` for older services. The line is
+yellow while `warnings` is nonempty. Other states read `update ci-runners`, `update cockpit`, `tick has not run` or
+`ci-runners does not answer`. A `v: 1` reply missing the `servers` array or `tick` object shows
+`ci-runners status is not understood` in the `down` state. `no-tick` means `tick.last_at` is null or missing:
 a tick uninstalled after it ran stays `live`, and the service's own warnings say what is wrong. A warning without `text`
 shows its `kind`. Ages, idle times and deadlines are the service's own `age_s`, `idle_s` and `next.in_s`, and the tick's and
 queue's ages count from its `generated_at`, so the model does not depend on cockpit's clock. A deadline a minute or more in
@@ -1649,13 +1653,19 @@ shown as `≈ N ₽`; the tile is its `cost_total_rub`. When the service's `stat
 whenever the queue is polled; `queue_stale` is the service's `queue.stale` flag (missing reads false): the last queue
 poll failed and the count is the last good one. The screen marks it in the warning tone.
 
-The Autoscale strip sits above the servers when the model has an `autoscale` block. It reads `on` (or `paused by <who>
-<ago> ago · <reason>`, in the warning tone, each part only when the service gives it), `max N (<source>, cap M)`,
-`trigger ≥Q waiting or Wm` and `last <ago> ago: <decision>`; a decision that is blocked or failed is in the warning
-tone, and with `autoscale` off in the service's config the strip reads `autoscale off in config` and has no buttons. The
-buttons are Pause or Resume (key `p`, shown when `can_pause`), `Max −` (`-`, disabled at 0), `Max +` (`+` or `=`,
-disabled at `max_vms`) and, once the max was set from here (`max_source` is `set-max`), `Reset max` (`0`); the max
-buttons show when `can_set_max`. The keys work in the space like the buttons, and only one control runs at a time.
+The Autoscale card shows a status badge, the maximum beside its stepper buttons, and the number of heavy jobs waiting.
+A null waiting count reads as `—` with a `not read` tooltip. Older services omit the waiting figure and use `queued_runs`
+for the current queue tile. The card shows the max source and cap, trigger, last decision and any pause details.
+With autoscale off in the service's config, the card omits the max and controls. The Pause or Resume button uses
+`p` when `can_pause` is available. The `−` and `+` buttons use `-` and `+` or `=` when `can_set_max` is
+available, with limits at zero and `max_vms`. Reset uses `0` for a maximum set from cockpit. One control runs at a time.
+
+The History card follows Autoscale and precedes the current tiles and server list. `24 h` shows hourly cloud-server
+averages and a Waiting jobs line on the same axis. `7 d` shows server-hours per local day. The `w` key switches windows
+while Runners has focus. Hovering shows row values and coverage. Gaps are marked `no data`. Tiles show launches, servers
+that took jobs, wasted starts, estimated spend, time to online and autoscale activity. The notes show coverage, the price
+used for estimates and service warnings. An empty history shows `No history yet`. A stats error stays in the History
+card and a service without `stats-offline` hides the card.
 
 A control is a hub act on the `runners` view: `pause`, `resume`, `set-max` (one server count) and `reset-max`. The hub runs
 `ci-runners autoscale pause|resume|set-max N|set-max --reset` with `--actor cockpit` and a 20 second limit, only when the service's
@@ -1665,12 +1675,12 @@ stderr (or `ci-runners autoscale <verb> exited <code>`), `this ci-runners cannot
 `this ci-runners cannot change the server cap; update it` when the feature is missing, `not a server count: …` for a bad count, or
 `ci-runners is not installed on this machine`.
 
-For the sandbox, `scripts/fake-ci-runners.sh` answers `version --json` and `status --json --offline` from the crate's
-fixtures (`CI_RUNNERS_FAKE=stale` serves the one with a stale tick):
+For the sandbox, `scripts/fake-ci-runners.sh` answers `version --json`, `status --json --offline` and `stats --json --offline` from the
+crate's fixtures. `CI_RUNNERS_FAKE=stale` serves the stale tick, and `CI_RUNNERS_FAKE=nostats` hides offline history.
 `CI_RUNNERS_BIN=$PWD/scripts/fake-ci-runners.sh COCKPIT_SANDBOX=/tmp/cc-r sh scripts/sandbox.sh start`.
 It also answers `autoscale pause|resume|set-max N|set-max --reset --actor cockpit` by keeping the pause and the max in
 `${TMPDIR:-/tmp}/fake-ci-runners.<uid>` and rewriting the fixture's `paused`, `paused_by`, `max_servers` and `max_servers_source`
-from it, so the strip follows the buttons; `CI_RUNNERS_FAKE=fail` makes every `autoscale` command exit 1 with `control.lock busy`.
+from it, so the card follows the buttons. `CI_RUNNERS_FAKE=fail` makes every `autoscale` command exit 1 with `control.lock busy`.
 
 ## Views `routines` and `routines-when` (the routines space, both halves)
 

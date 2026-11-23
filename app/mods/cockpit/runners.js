@@ -1,14 +1,22 @@
-// The Runners space: the cloud CI servers and runners that ci-runners manages, as the hub's `runners` view gives them.
-// Above, the counts and the estimated cost now; below, one row per server with what it does and what the service will
-// do next; beside the list, the selected server's facts. The screen shows ci-runners' state, and its only actions are the autoscale controls.
+// The Runners space shows autoscale controls and offline history above current CI runner servers.
 
 import { div } from "gpui-kit";
+import * as base from "gpui-base";
 import { h_flex, v_flex } from "gpui-base";
 import * as hub from "./hub.js";
-import { tokens, TEXT, RADIUS, Icon, Badge, Button, PageHeader, KeyHints, Toaster, Empty, ErrorState, Skeleton, Scroller, SidePanel, Mono, Metric, Tiles, alpha } from "./ui.js";
+import { Chart, SERIES } from "./plot.js";
+import { tokens, TEXT, RADIUS, Icon, Badge, Button, Card, Tabs, PageHeader, KeyHints, Toaster, Empty, ErrorState, Skeleton, SidePanel, Mono, Metric, Tiles, alpha } from "./ui.js";
 
 const SIDE_AT = 960;
-const STATS_NOTE = "Stats over a period will show here once ci-runners has stats --json.";
+const SIDE_WIDTH = 400;
+const HISTORY_WINDOWS = [{ value: "24h", label: "24 h" }, { value: "7d", label: "7 d" }];
+const BADGES = {
+  on: { label: "On", variant: "success" },
+  blocked: { label: "On · blocked", variant: "warning" },
+  error: { label: "On · error", variant: "destructive" },
+  paused: { label: "Paused", variant: "warning" },
+  off: { label: "Off in config", variant: "secondary" },
+};
 
 /** The servers as they show, in the model's order; empty unless the model is live. */
 export function serverRows(model) {
@@ -26,7 +34,7 @@ export function runnersBadge(v) {
   return v?.badge ?? null;
 }
 
-/** The tiles above the list; Queued and Cost now appear only when the service sends them. */
+/** The tiles above the list, with queue and cost figures when the service provides them. */
 export function tiles(model) {
   const t = model?.tiles;
   if (model?.state !== "live" || !t) return [];
@@ -34,40 +42,61 @@ export function tiles(model) {
     { id: "servers", label: "Servers", value: t.servers, icon: "server" },
     { id: "busy", label: "Busy", value: `${t.busy} / ${t.runners}`, icon: "play", hint: "runners working" },
   ];
-  if (t.queued != null) out.push({ id: "queued", label: "Queued", value: t.queued, icon: "hourglass", hint: t.queue_ago ? `as of ${t.queue_ago} ago` : undefined, hintWarn: Boolean(t.queue_stale) });
+  if (t.queued != null) out.push({ id: "queued", label: t.queue_label ?? "Queued", value: t.queued, icon: "hourglass", hint: t.queue_ago ? `as of ${t.queue_ago} ago` : undefined, hintWarn: Boolean(t.queue_stale) });
   if (t.cost != null) out.push({ id: "cost", label: "Cost now", value: t.cost, icon: "gauge", hint: "estimate" });
   return out;
 }
 
-/** The strip's words as parts, each marked when the service's tone calls for the warning colour; null without an autoscale block. */
-export function autoscaleParts(model) {
+/** The autoscale badge label and tone from the hub's state. */
+export function autoscaleBadge(model) {
+  const state = model?.autoscale?.state;
+  return Object.hasOwn(BADGES, state) ? BADGES[state] : null;
+}
+
+/** The configured maximum's source and cap. */
+export function maxCaption(model) {
   const a = model?.autoscale;
   if (!a) return null;
-  if (!a.on) return [{ text: "autoscale off in config", warn: false }];
-  const head = a.paused ? ["paused", a.paused_by ? `by ${a.paused_by}` : null, a.paused_ago ? `${a.paused_ago} ago` : null].filter(Boolean).join(" ") + (a.pause_reason ? ` · ${a.pause_reason}` : "") : "on";
-  const last = a.last ? `last ${a.last.ago ? `${a.last.ago} ago: ` : ": "}${a.last.text}` : null;
-  return [
-    { text: head, warn: Boolean(a.paused) },
-    { text: `max ${a.max} (${a.max_source}, cap ${a.max_vms})`, warn: false },
-    { text: `trigger ${a.trigger}`, warn: false },
-    last ? { text: last, warn: a.last.tone === "warning" } : null,
-  ].filter(Boolean);
+  return `${a.max_source === "set-max" ? "set here" : "from config"} · cap ${a.max_vms ?? "—"}`;
 }
 
-/** The strip's words in one line, or null without an autoscale block. */
-export function autoscaleLine(model) {
-  return autoscaleParts(model)?.map((p) => p.text).join(" · ") ?? null;
+/** The waiting count and its tooltip when the service has not read it. */
+export function waitingFigure(model) {
+  const waiting = model?.autoscale?.waiting;
+  if (!waiting) return null;
+  return waiting.count == null ? { value: "—", hint: "not read" } : { value: String(waiting.count) };
 }
 
-/** The strip's visible controls: Pause or Resume, max less and more, and Reset once the max was set from here. */
+/** The actor, age and reason for a pause. */
+export function pauseCaption(model) {
+  const a = model?.autoscale;
+  if (!a?.on || !a.paused) return null;
+  const by = [a.paused_by ? `by ${a.paused_by}` : null, a.paused_ago ? `${a.paused_ago} ago` : null].filter(Boolean).join(" ");
+  return [by, a.pause_reason].filter(Boolean).join(" · ") || null;
+}
+
+/** The chart, tiles and notices for a history window. */
+export function historyView(model, win) {
+  const history = model?.history;
+  if (!history) return null;
+  if (history.error) return { error: history.error };
+  const notes = history.notes ?? [];
+  if (history.empty) return { empty: true, notes };
+  const window = history.windows?.[win];
+  const chart = history.charts?.[win];
+  if (!window || !chart) return null;
+  return { chart, tiles: window.tiles, notes: [...(window.notes ?? []), ...notes] };
+}
+
+/** The available controls and their keyboard shortcuts. */
 export function autoscaleControls(model) {
   const a = model?.autoscale;
   if (!a?.on) return [];
   const out = [];
   if (a.can_pause) out.push(a.paused ? { id: "resume", label: "Resume", key: "p", disabled: false } : { id: "pause", label: "Pause", key: "p", disabled: false });
   if (a.can_set_max) {
-    out.push({ id: "less", label: "Max −", key: "-", disabled: a.max <= 0 });
-    out.push({ id: "more", label: "Max +", key: "+", disabled: a.max >= a.max_vms });
+    out.push({ id: "less", label: "Max −", key: "-", disabled: !Number.isInteger(a.max) || a.max <= 0 });
+    out.push({ id: "more", label: "Max +", key: "+", disabled: !Number.isInteger(a.max) || !Number.isInteger(a.max_vms) || a.max >= a.max_vms });
     if (a.max_source === "set-max") out.push({ id: "reset", label: "Reset max", key: "0", disabled: false });
   }
   return out;
@@ -132,7 +161,10 @@ export default class Runners {
     this.visible = false;
     this.width = 1200;
     this.height = 800;
-    this.scroller = new Scroller();
+    this.scroll = base.ScrollHandle?.new() ?? null;
+    this.historyWindow = "24h";
+    this.historyHover = null;
+    this.historyHidden = { "24h": new Set(), "7d": new Set() };
     this.toasts = new Toaster();
     this.busy = false;
     this.handle = cx.focus_handle();
@@ -181,11 +213,33 @@ export default class Runners {
     const rows = this.rows();
     if (!rows.length) return;
     const at = rows.findIndex((r) => r.key === this.sel);
-    this.select(rows[Math.max(0, Math.min(rows.length - 1, (at < 0 ? 0 : at) + by))].key, cx);
+    const next = Math.max(0, Math.min(rows.length - 1, (at < 0 ? 0 : at) + by));
+    this.select(rows[next].key, cx);
+    // The cards and current metrics occupy the first scroll item.
+    this.scroll?.scroll_to_item(next + 1);
+  }
+
+  historyWindows() {
+    const history = this.model?.history;
+    if (this.model?.state !== "live" || history?.error || history?.empty) return [];
+    return HISTORY_WINDOWS.filter(({ value }) => history?.windows?.[value] && history.charts?.[value]);
+  }
+
+  setHistoryWindow(win, cx) {
+    this.historyWindow = win;
+    this.historyHover = null;
+    cx.notify();
   }
 
   key(e, cx) {
     const s = e.keystroke;
+    if (s === "w") {
+      const items = this.historyWindows();
+      if (items.length < 2) return false;
+      const next = items.find(({ value }) => value !== this.historyWindow);
+      this.setHistoryWindow(next.value, cx);
+      return true;
+    }
     if (s === "j" || s === "down") this.move(1, cx);
     else if (s === "k" || s === "up") this.move(-1, cx);
     else {
@@ -223,49 +277,115 @@ export default class Runners {
   // -------------------------------------------------------------------------------------------------------------------
   // Drawing
 
-  /** The Autoscale strip: its words, warning-coloured where the service says so, and its buttons. */
+  /** The autoscale state, current demand and available controls. */
   autoscale(k) {
-    const parts = autoscaleParts(this.model);
-    if (!parts) return null;
+    const badge = autoscaleBadge(this.model);
+    if (!badge) return null;
+    const a = this.model.autoscale;
     const controls = autoscaleControls(this.model);
-    return h_flex()
-      .id("runners-autoscale")
-      .gap(12)
-      .px(12)
-      .py(8)
-      .items_center()
-      .rounded(RADIUS.md)
-      .border_1()
-      .border_color(k.border)
-      .child(div().flex_none().text_size(TEXT.sm).font_medium().child("Autoscale"))
-      .child(
-        h_flex()
-          .flex_1()
-          .min_w(0)
-          .gap(6)
-          .flex_wrap()
-          .text_size(TEXT.xs)
-          .children(parts.map((p, i) => div().text_color(p.warn ? k.warning : k.mutedFg).child(i ? `· ${p.text}` : p.text))),
-      )
-      .when(controls.length > 0, (e) =>
-        e.child(
-          h_flex()
-            .gap(6)
-            .flex_none()
-            .children(
-              controls.map((c) =>
-                Button(`runners-autoscale-${c.id}`, {
-                  label: c.label,
-                  kbd: c.key,
-                  size: "sm",
-                  variant: "outline",
-                  disabled: c.disabled || this.busy,
-                  onClick: (_e, cx) => this.run(c.id, cx),
-                }),
-              ),
-            ),
-        ),
-      );
+    const control = (id, options) => {
+      const c = controls.find((c) => c.id === id);
+      return c ? Button(`runners-autoscale-${id}`, {
+        label: c.label,
+        size: "sm",
+        variant: "outline",
+        disabled: c.disabled || this.busy,
+        onClick: (_e, cx) => this.run(id, cx),
+        ...options,
+      }) : null;
+    };
+    const action = control(a.paused ? "resume" : "pause", { kbd: "p" });
+    const paused = pauseCaption(this.model);
+    const waiting = waitingFigure(this.model);
+    const heading = (label) => div().text_size(TEXT.xs).font_semibold().text_color(k.mutedFg).child(label);
+    const number = (value) => div().text_size(26).font_semibold().text_color(k.foreground).child(String(value ?? "—"));
+    const words = (text, color = k.mutedFg) => div().text_size(TEXT.xs).text_color(color).whitespace_normal().child(text);
+    const dot = { secondary: k.mutedFg, success: k.success, warning: k.warning, destructive: k.destructive }[badge.variant];
+    const status = v_flex().min_w(0).gap(4).items_start()
+      .child(Badge(badge.label, badge.variant, { dot }))
+      .when(Boolean(paused), (e) => e.child(words(paused, k.warning)));
+    const max = a.on ? v_flex().flex_none().gap(2).items_center()
+      .child(heading("Max servers"))
+      .child(h_flex().gap(8).items_center().children([
+        control("less", { label: "−", tooltip: "Decrease max servers" }),
+        number(a.max),
+        control("more", { label: "+", tooltip: "Increase max servers" }),
+      ].filter(Boolean)))
+      .child(h_flex().gap(6).items_center().children([
+        words(maxCaption(this.model)),
+        control("reset", { label: "Reset", variant: "link", tooltip: "Use the config maximum" }),
+      ].filter(Boolean))) : null;
+    const demand = waiting ? v_flex().flex_none().gap(2).items_center()
+      .child(heading("Waiting heavy jobs"))
+      .child(number(waiting.value).when(Boolean(waiting.hint), (e) => e.id("runners-waiting").tooltip(waiting.hint))) : null;
+    const last = a.last?.text ? `last${a.last.ago ? ` ${a.last.ago} ago` : ""}: ${a.last.text}` : null;
+
+    return Card({
+      id: "runners-autoscale",
+      title: "Autoscale",
+      action,
+      children: [
+        h_flex().gap(20).items_start().flex_wrap().children([status, max, demand].filter(Boolean)),
+        a.on && (a.trigger || last) ? h_flex().gap(6).flex_wrap().children([
+          a.trigger ? words(`trigger ${a.trigger}`) : null,
+          last ? words(a.trigger ? `· ${last}` : last, a.last.tone === "warning" ? k.warning : k.mutedFg) : null,
+        ].filter(Boolean)) : null,
+      ].filter(Boolean),
+    });
+  }
+
+  /** The selected history chart, window totals and service notes. */
+  history(k) {
+    const items = this.historyWindows();
+    const win = items.some((item) => item.value === this.historyWindow) ? this.historyWindow : items[0]?.value;
+    const history = historyView(this.model, win);
+    if (!history) return null;
+    const notes = (history.notes ?? []).map((n) =>
+      div().text_size(TEXT.xs).text_color(n.tone === "warning" ? k.warning : k.mutedFg).whitespace_normal().child(n.text));
+    if (history.empty || history.error) {
+      return Card({
+        id: "runners-history",
+        title: "History",
+        children: [
+          div().text_size(TEXT.sm).text_color(history.error ? k.warning : k.mutedFg).whitespace_normal().child(history.error ?? "No history yet"),
+          ...notes,
+        ],
+      });
+    }
+
+    const colors = {
+      busy: SERIES[5], idle: k.warning, booting: SERIES[0], waiting: k.foreground,
+      stopped: k.mutedFg, expired: SERIES[4], builder: SERIES[3], unknown: k.dim,
+    };
+    const chart = { ...history.chart, series: history.chart.series.map((s) => ({ ...s, color: colors[s.key] })) };
+    const hidden = this.historyHidden[win];
+    const side = this.width >= SIDE_AT && this.sel !== null ? SIDE_WIDTH : 0;
+    return Card({
+      id: "runners-history",
+      title: "History",
+      action: items.length > 1 ? Tabs("runners-history-window", { items, value: win, onChange: (next, cx) => this.setHistoryWindow(next, cx) }) : null,
+      children: [
+        Chart(`runners-history-${win}`, chart, {
+          height: 140,
+          width: Math.max(0, this.width - side - 80),
+          hover: this.historyHover,
+          hidden,
+          onHover: (at, cx) => {
+            this.historyHover = at;
+            cx.notify();
+          },
+          onToggle: (name, cx) => {
+            if (!hidden.delete(name)) hidden.add(name);
+            cx.notify();
+          },
+        }),
+        Tiles(history.tiles.map((t) => {
+          const tone = t.tone === "warning" ? k.warning : undefined;
+          return Metric(`runners-history-tile-${t.id}`, { label: t.label, value: t.value, tone, hint: t.hint, hintTone: tone, tooltip: t.hint });
+        })),
+        ...notes,
+      ],
+    });
   }
 
   tiles() {
@@ -333,19 +453,15 @@ export default class Runners {
       .when(this.width >= 760 && Boolean(s.cost), (e) => e.child(div().flex_none().text_size(TEXT.xs).text_color(k.mutedFg).child(costWords(s.cost))));
   }
 
-  list(k) {
+  list(k, stale) {
     const rows = this.rows();
-    if (!rows.length) return Empty({ icon: "server", title: "No servers", description: "ci-runners has no cloud servers right now." });
-    const at = rows.findIndex((r) => r.key === this.sel);
-    const items = rows.map((row) => ({
-      height: 50,
-      el: this.serverRow(row, k, row.key === this.sel).on_click((_e, cx) => {
+    if (!rows.length) return [Empty({ icon: "server", title: "No servers", description: "ci-runners has no cloud servers right now." })];
+    return rows.map((row) => v_flex().flex_none().px(4).h(50).when(stale, (e) => e.opacity(0.5))
+      .child(this.serverRow(row, k, row.key === this.sel).on_click((_e, cx) => {
         this.select(row.key, cx);
         this.handle.focus();
         cx.notify();
-      }),
-    }));
-    return this.scroller.view("runners-list", items, at, { gap: 2, padding: 4 });
+      })));
   }
 
   fact(label, value, k, { mono = false } = {}) {
@@ -364,7 +480,7 @@ export default class Runners {
     return SidePanel("runners-side", {
       title: s.name,
       description: s.role,
-      width: 400,
+      width: SIDE_WIDTH,
       children: [
         v_flex()
           .gap(6)
@@ -394,31 +510,15 @@ export default class Runners {
     const stale = Boolean(m.tick?.stale);
     const asOf = stale && m.tick.ago ? `as of ${m.tick.ago} ago` : null;
     const failed = m.tick?.error_text ? `last tick: ${m.tick.error_text}` : null;
-    return h_flex()
-      .flex_1()
-      .min_h(0)
-      .child(
-        v_flex()
-          .flex_1()
-          .h_full()
-          .min_w(0)
-          .min_h(0)
-          .child(
-            v_flex()
-              .px(24)
-              .pt(16)
-              .pb(8)
-              .gap(12)
-              .flex_none()
-              .child(this.warnings(k) ?? div())
-              .child(this.autoscale(k) ?? div())
-              .when(Boolean(asOf), (e) => e.child(div().text_size(TEXT.xs).text_color(k.warning).child(asOf)))
-              .when(Boolean(failed), (e) => e.child(div().text_size(TEXT.xs).text_color(k.warning).whitespace_normal().child(failed)))
-              .child(v_flex().when(stale, (e) => e.opacity(0.5)).child(this.tiles())),
-          )
-          .child(v_flex().flex_1().min_h(0).px(20).when(stale, (e) => e.opacity(0.5)).child(this.list(k)))
-          .child(div().px(24).py(8).flex_none().text_size(TEXT.xs).text_color(k.mutedFg).child(STATS_NOTE)),
-      )
+    const header = v_flex().pb(6).gap(12).flex_none()
+      .children([this.warnings(k), this.autoscale(k), this.history(k)].filter(Boolean))
+      .when(Boolean(asOf), (e) => e.child(div().text_size(TEXT.xs).text_color(k.warning).child(asOf)))
+      .when(Boolean(failed), (e) => e.child(div().text_size(TEXT.xs).text_color(k.warning).whitespace_normal().child(failed)))
+      .child(v_flex().when(stale, (e) => e.opacity(0.5)).child(this.tiles()));
+    let body = v_flex().id("runners-body").flex_1().h_full().min_w(0).min_h(0).px(24).py(16).gap(2)
+      .overflow_y_scrollbar().child(header).children(this.list(k, stale));
+    if (this.scroll) body = body.track_scroll(this.scroll);
+    return h_flex().flex_1().min_h(0).child(body)
       .when(this.width >= SIDE_AT, (e) => e.child(this.side(k) ?? div()));
   }
 
@@ -444,6 +544,8 @@ export default class Runners {
     const m = this.model;
     const description = m?.state === "live" ? m.line?.text : "Cloud CI runners from ci-runners";
     const tick = m?.tick;
+    const keys = [["j k", "move"], ...autoscaleControls(m).filter((c) => !c.disabled).map((c) => [c.key, c.label.toLowerCase()])];
+    if (this.historyWindows().length > 1) keys.push(["w", "24 h / 7 d"]);
     const out = v_flex()
       .id("runners")
       .track_focus(this.handle)
@@ -475,7 +577,7 @@ export default class Runners {
         }),
       )
       .child(this.body(k))
-      .child(KeyHints([["j k", "move"], ...autoscaleControls(m).filter((c) => !c.disabled).map((c) => [c.key, c.label.toLowerCase()])]));
+      .child(KeyHints(keys));
     const toasts = this.toasts.render();
     return toasts ? out.child(toasts) : out;
   }

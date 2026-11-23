@@ -52,7 +52,7 @@ async function fixture() {
 /** A Runners view on a model, without the hub subscription init starts. */
 function view(f, m) {
   const v = Object.create(f.runners.Runners.prototype);
-  Object.assign(v, { model: m, sel: null });
+  Object.assign(v, { model: m, sel: null, historyWindow: "24h", historyHover: null });
   return v;
 }
 
@@ -92,18 +92,79 @@ test("j and k walk the servers", async () => {
   assert.equal(v.key({ keystroke: "x" }, cx), false);
 });
 
-test("the Autoscale line says what the service says", async () => {
+test("the Autoscale badge names and colors all service states", async () => {
   const f = await fixture();
   const m = await model();
-  assert.equal(f.runners.autoscaleLine(m), "on · max 3 (config, cap 6) · trigger ≥3 waiting or 10m · last 2m ago: 5 waiting → created 2");
-  assert.equal(f.runners.autoscaleLine({ ...m, autoscale: { ...m.autoscale, on: false } }), "autoscale off in config");
-  const paused = f.runners.autoscaleLine({ ...m, autoscale: { ...m.autoscale, paused: true, paused_by: "cockpit", paused_ago: "5m" } });
-  assert.ok(paused.startsWith("paused by cockpit 5m ago"), paused);
-  const why = f.runners.autoscaleLine({ ...m, autoscale: { ...m.autoscale, paused: true, paused_by: "cockpit", paused_ago: "5m", pause_reason: "deploy freeze" } });
-  assert.ok(why.startsWith("paused by cockpit 5m ago · deploy freeze"), why);
-  const broken = f.runners.autoscaleLine({ ...m, autoscale: { ...m.autoscale, paused: true, paused_by: null, paused_ago: null, pause_reason: "control.json: unexpected end of JSON input" } });
-  assert.ok(broken.startsWith("paused · control.json: unexpected end of JSON input"), broken);
-  assert.equal(f.runners.autoscaleLine({ ...m, autoscale: null }), null);
+  for (const [state, label, variant] of [
+    ["on", "On", "success"],
+    ["blocked", "On · blocked", "warning"],
+    ["error", "On · error", "destructive"],
+    ["paused", "Paused", "warning"],
+    ["off", "Off in config", "secondary"],
+  ]) {
+    assert.deepEqual(plain(f.runners.autoscaleBadge({ ...m, autoscale: { ...m.autoscale, state } })), { label, variant });
+  }
+  assert.equal(f.runners.autoscaleBadge({ ...m, autoscale: null }), null);
+});
+
+test("the maximum, waiting figure and pause reason reflect the service", async () => {
+  const f = await fixture();
+  const m = await model();
+  const edit = (a) => ({ ...m, autoscale: { ...m.autoscale, ...a } });
+  assert.equal(f.runners.maxCaption(m), "from config · cap 6");
+  assert.equal(f.runners.maxCaption(edit({ max_source: "set-max" })), "set here · cap 6");
+  assert.deepEqual(plain(f.runners.waitingFigure(m)), { value: "2" });
+  assert.deepEqual(plain(f.runners.waitingFigure(edit({ waiting: { count: null } }))), { value: "—", hint: "not read" });
+  assert.deepEqual(plain(f.runners.waitingFigure(edit({ waiting: { count: 0 } }))), { value: "0" });
+  const { waiting, ...older } = m.autoscale;
+  assert.equal(f.runners.waitingFigure({ ...m, autoscale: older }), null);
+  assert.equal(f.runners.pauseCaption(edit({ paused: true, paused_by: "cockpit", paused_ago: "5m", pause_reason: "deploy freeze" })), "by cockpit 5m ago · deploy freeze");
+  assert.equal(f.runners.pauseCaption(edit({ paused: true, pause_reason: "control.json: unexpected end of JSON input" })), "control.json: unexpected end of JSON input");
+  assert.equal(f.runners.pauseCaption(m), null);
+});
+
+test("History selects the window chart, tiles and notes", async () => {
+  const f = await fixture();
+  const m = await model();
+  const daily = plain(f.runners.historyView(m, "24h"));
+  assert.equal(daily.tiles.length, 6);
+  assert.equal(daily.tiles[0].label, "Launched");
+  assert.match(daily.tiles[0].hint, /1 still running/);
+  assert.equal(daily.tiles[2].label, "Wasted");
+  assert.equal(daily.tiles[2].value, 2);
+  assert.equal(daily.tiles[2].tone, "warning");
+  assert.equal(daily.chart.series.find((s) => s.key === "waiting").line, true);
+  assert.deepEqual(daily.notes.map((n) => n.text), [
+    "data covers 73% of the period",
+    "partly estimated from snapshots",
+    "some server lifetimes are bounded",
+    "≈ at 4.34 ₽ per started server-hour",
+  ]);
+  assert.equal(f.runners.historyView(m, "7d").chart.labels.at(-1), "today");
+  assert.deepEqual(plain(f.runners.historyView({ history: { error: "boom" } }, "24h")), { error: "boom" });
+  assert.equal(f.runners.historyView({ history: null }, "24h"), null);
+
+  m.history.windows["24h"].tiles[3] = { id: "spent", label: "Spent", value: "—", hint: "no price in config" };
+  assert.equal(f.runners.historyView(m, "24h").tiles[3].hint, "no price in config");
+  const notes = [{ text: "no-journal", tone: "warning" }];
+  assert.deepEqual(plain(f.runners.historyView({ history: { empty: true, notes } }, "24h")), { empty: true, notes });
+});
+
+test("w toggles History windows only when the choices are available", async () => {
+  const f = await fixture();
+  const m = await model();
+  const v = view(f, m);
+  v.historyHover = 12;
+  assert.equal(v.key({ keystroke: "w" }, cx), true);
+  assert.equal(v.historyWindow, "7d");
+  assert.equal(v.historyHover, null);
+  assert.equal(v.key({ keystroke: "w" }, cx), true);
+  assert.equal(v.historyWindow, "24h");
+  for (const history of [null, { empty: true }, { error: "boom" }]) {
+    const hidden = view(f, { ...m, history });
+    assert.equal(hidden.key({ keystroke: "w" }, cx), false);
+    assert.equal(hidden.historyWindow, "24h");
+  }
 });
 
 test("the Autoscale controls follow the service's state and features", async () => {
@@ -148,11 +209,12 @@ test("p, plus, minus and 0 send the autoscale acts, once at a time", async () =>
 test("no queue tile when the service sends none", async () => {
   const f = await fixture();
   const m = await model();
-  assert.deepEqual(plain(f.runners.tiles(m).map((t) => t.label)), ["Servers", "Busy", "Queued", "Cost now"]);
-  assert.equal(plain(f.runners.tiles(m)).find((t) => t.label === "Queued").hint, "as of 4m ago");
-  const queued = (stale) => plain(f.runners.tiles({ ...m, tiles: { ...m.tiles, queue_stale: stale } })).find((t) => t.label === "Queued");
+  assert.deepEqual(plain(f.runners.tiles(m).map((t) => t.label)), ["Servers", "Busy", "Waiting", "Cost now"]);
+  assert.equal(plain(f.runners.tiles(m)).find((t) => t.label === "Waiting").hint, "as of 4m ago");
+  const queued = (stale) => plain(f.runners.tiles({ ...m, tiles: { ...m.tiles, queue_stale: stale } })).find((t) => t.label === "Waiting");
   assert.equal(queued(true).hintWarn, true);
   assert.equal(queued(false).hintWarn, false);
+  assert.equal(f.runners.tiles({ ...m, tiles: { ...m.tiles, queue_label: "Queued" } })[2].label, "Queued");
   m.tiles.queued = null;
   m.tiles.cost = null;
   assert.deepEqual(plain(f.runners.tiles(m).map((t) => t.label)), ["Servers", "Busy"]);
