@@ -13,6 +13,7 @@ use serde_json::Value;
 use crate::model::{self, Source};
 
 const LIMIT: Duration = Duration::from_secs(5);
+const ACT_LIMIT: Duration = Duration::from_secs(20);
 const CAP: usize = 1 << 20;
 
 /// The folder ci-runners keeps its state in, where its tick writes.
@@ -43,9 +44,9 @@ fn bin() -> Option<PathBuf> {
 }
 
 /// Runs the binary with these arguments; a timeout or a failure to start is an error naming `what`.
-fn call(bin: &Path, args: &[&str], what: &str) -> Result<std::process::Output, String> {
-    run::output(Command::new(bin).args(args), LIMIT, CAP, &Default::default()).map_err(|e| match e.as_str() {
-        "it took too long" => format!("{what} did not answer within {}s", LIMIT.as_secs()),
+fn call(bin: &Path, args: &[&str], what: &str, limit: Duration) -> Result<std::process::Output, String> {
+    run::output(Command::new(bin).args(args), limit, CAP, &Default::default()).map_err(|e| match e.as_str() {
+        "it took too long" => format!("{what} did not answer within {}s", limit.as_secs()),
         _ => format!("{what} could not run: {e}"),
     })
 }
@@ -60,7 +61,7 @@ fn features(bin: &Path) -> Result<Vec<String>, String> {
     if let Some(known) = key.as_ref().and_then(|k| cache.lock().ok()?.get(k).cloned()) {
         return Ok(known);
     }
-    let out = call(bin, &["version", "--json"], "ci-runners version")?;
+    let out = call(bin, &["version", "--json"], "ci-runners version", LIMIT)?;
     let found: Vec<String> = Some(out)
         .filter(|o| o.status.success())
         .and_then(|o| serde_json::from_slice::<Value>(&o.stdout).ok())
@@ -86,7 +87,7 @@ fn source(bin: Option<PathBuf>) -> Source {
         }
         Ok(features) => features,
     };
-    let out = match call(&bin, &["status", "--json", "--offline"], "ci-runners status") {
+    let out = match call(&bin, &["status", "--json", "--offline"], "ci-runners status", LIMIT) {
         Ok(out) => out,
         Err(e) => return Source::Down(e),
     };
@@ -101,6 +102,51 @@ fn source(bin: Option<PathBuf>) -> Source {
 
 pub fn view(_args: &Value, _doc: &dyn Fn(&str) -> Value) -> Value {
     model::model(source(bin()), &state_dir(), Utc::now())
+}
+
+/// Runs an autoscale command for the view: `pause`, `resume`, `set-max` (one count) and `reset-max`; other actions are not ours.
+pub fn act(action: &str, args: &[Value]) -> Option<Result<String, String>> {
+    if !["pause", "resume", "set-max", "reset-max"].contains(&action) {
+        return None;
+    }
+    Some(run_act(bin(), action, args, ACT_LIMIT))
+}
+
+fn run_act(bin: Option<PathBuf>, action: &str, args: &[Value], limit: Duration) -> Result<String, String> {
+    let Some(bin) = bin else { return Err("ci-runners is not installed on this machine".into()) };
+    let (feature, cannot) = match action {
+        "pause" | "resume" => ("pause", "pause autoscale"),
+        _ => ("set-max", "change the server cap"),
+    };
+    let count = match action {
+        "set-max" => match args.first().and_then(Value::as_u64) {
+            Some(n) => Some(n.to_string()),
+            None => return Err(format!("not a server count: {}", args.first().map(Value::to_string).unwrap_or_default())),
+        },
+        _ => None,
+    };
+    if !features(&bin)?.iter().any(|f| f == feature) {
+        return Err(format!("this ci-runners cannot {cannot}; update it"));
+    }
+    let mut argv = vec!["autoscale", if action == "reset-max" { "set-max" } else { action }];
+    match &count {
+        Some(n) => argv.push(n),
+        None if action == "reset-max" => argv.push("--reset"),
+        None => {}
+    }
+    argv.extend(["--actor", "cockpit"]);
+    let what = format!("ci-runners autoscale {}", argv[1]);
+    let out = call(&bin, &argv, &what, limit)?;
+    if !out.status.success() {
+        let why = first_line(&String::from_utf8_lossy(&out.stderr));
+        return Err(if why.is_empty() { format!("{what} exited {}", out.status.code().unwrap_or(1)) } else { why });
+    }
+    Ok(match (action, count) {
+        ("pause", _) => "Autoscale paused".into(),
+        ("resume", _) => "Autoscale resumed".into(),
+        ("set-max", Some(n)) => format!("Max servers set to {n}"),
+        _ => "Max servers back to the config's".into(),
+    })
 }
 
 /// Rebuilds the view every 20 seconds while something shows it, so a stalled tick reads as stale.
@@ -121,6 +167,7 @@ pub fn start(touch: fn()) {
 mod tests {
     use super::*;
     use crate::model::{Source, model};
+    use serde_json::json;
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
@@ -143,9 +190,21 @@ mod tests {
 
     impl Fake {
         fn new(version: &str, status: &str) -> Fake {
+            Fake::build(version, status, "true")
+        }
+
+        /// A fake that declares `features` and runs the `autoscale` snippet.
+        fn controls(features: &[&str], autoscale: &str) -> Fake {
+            let list = features.iter().map(|f| format!("\"{f}\"")).collect::<Vec<_>>().join(",");
+            Fake::build(&format!("echo '{{\"version\":\"0\",\"json_v\":1,\"features\":[{list}]}}'"), "echo '{}'", autoscale)
+        }
+
+        fn build(version: &str, status: &str, autoscale: &str) -> Fake {
             let dir = tempfile::tempdir().unwrap();
             let bin = dir.path().join("ci-runners");
-            let script = format!("#!/bin/sh\necho \"$*\" >> \"$(dirname \"$0\")/calls\"\ncase \"$1\" in\nversion) {version} ;;\nstatus) {status} ;;\nesac\n");
+            let script = format!(
+                "#!/bin/sh\necho \"$*\" >> \"$(dirname \"$0\")/calls\"\ncase \"$1\" in\nversion) {version} ;;\nstatus) {status} ;;\nautoscale) {autoscale} ;;\nesac\n"
+            );
             fs::write(&bin, script).unwrap();
             fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
             // A forked test thread can still hold the write fd for a moment, and exec then fails with ETXTBSY.
@@ -163,6 +222,10 @@ mod tests {
             fs::write(fake.dir.path().join("version.json"), VERSION).unwrap();
             fs::write(fake.dir.path().join("status.json"), STATUS).unwrap();
             fake
+        }
+
+        fn seen(&self) -> Vec<String> {
+            fs::read_to_string(self.dir.path().join("calls")).unwrap_or_default().lines().map(String::from).collect()
         }
 
         fn calls(&self, first: &str) -> usize {
@@ -257,5 +320,75 @@ mod tests {
         drop(file);
         source(Some(fake.bin.clone()));
         assert_eq!(fake.calls("version"), 2);
+    }
+
+    fn act_on(fake: &Fake, action: &str, args: &[Value]) -> Result<String, String> {
+        run_act(Some(fake.bin.clone()), action, args, Duration::from_secs(20))
+    }
+
+    #[test]
+    fn pause_runs_the_service_s_command() {
+        let fake = Fake::controls(&["status-offline", "pause", "set-max"], "true");
+        assert_eq!(act_on(&fake, "pause", &[]), Ok("Autoscale paused".into()));
+        assert_eq!(act_on(&fake, "resume", &[]), Ok("Autoscale resumed".into()));
+        assert_eq!(act_on(&fake, "set-max", &[json!(4)]), Ok("Max servers set to 4".into()));
+        assert_eq!(act_on(&fake, "reset-max", &[]), Ok("Max servers back to the config's".into()));
+        let seen: Vec<String> = fake.seen().into_iter().filter(|l| l.starts_with("autoscale")).collect();
+        assert_eq!(
+            seen,
+            [
+                "autoscale pause --actor cockpit",
+                "autoscale resume --actor cockpit",
+                "autoscale set-max 4 --actor cockpit",
+                "autoscale set-max --reset --actor cockpit"
+            ]
+        );
+    }
+
+    #[test]
+    fn an_undeclared_control_is_refused_without_a_call() {
+        let fake = Fake::controls(&["status-offline"], "true");
+        assert_eq!(act_on(&fake, "pause", &[]), Err("this ci-runners cannot pause autoscale; update it".into()));
+        assert_eq!(act_on(&fake, "resume", &[]), Err("this ci-runners cannot pause autoscale; update it".into()));
+        assert_eq!(act_on(&fake, "set-max", &[json!(2)]), Err("this ci-runners cannot change the server cap; update it".into()));
+        assert_eq!(act_on(&fake, "reset-max", &[]), Err("this ci-runners cannot change the server cap; update it".into()));
+        assert_eq!(fake.calls("autoscale"), 0);
+    }
+
+    #[test]
+    fn a_bad_max_is_refused() {
+        let fake = Fake::controls(&["status-offline", "pause", "set-max"], "true");
+        for args in [vec![], vec![json!("4")], vec![json!(-1)], vec![json!(1.5)]] {
+            let why = act_on(&fake, "set-max", &args).unwrap_err();
+            assert!(why.starts_with("not a server count"), "{why}");
+        }
+        assert_eq!(fake.calls("autoscale"), 0);
+    }
+
+    #[test]
+    fn a_failing_command_gives_its_stderr() {
+        let fake = Fake::controls(&["status-offline", "pause"], "echo 'control.lock busy' >&2; exit 1");
+        assert_eq!(act_on(&fake, "pause", &[]), Err("control.lock busy".into()));
+        let fake = Fake::controls(&["status-offline", "pause"], "exit 1");
+        assert_eq!(act_on(&fake, "pause", &[]), Err("ci-runners autoscale pause exited 1".into()));
+    }
+
+    #[test]
+    fn unknown_actions_are_not_ours() {
+        assert!(act("drain", &[]).is_none());
+    }
+
+    #[test]
+    fn no_binary_is_not_installed() {
+        assert_eq!(run_act(None, "pause", &[], ACT_LIMIT), Err("ci-runners is not installed on this machine".into()));
+    }
+
+    #[test]
+    fn a_hung_command_stops_at_the_limit() {
+        let fake = Fake::controls(&["status-offline", "pause"], "sleep 30");
+        let started = Instant::now();
+        let why = run_act(Some(fake.bin.clone()), "pause", &[], Duration::from_secs(1)).unwrap_err();
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert_eq!(why, "ci-runners autoscale pause did not answer within 1s");
     }
 }

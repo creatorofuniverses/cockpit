@@ -116,7 +116,7 @@ pub fn register() {
         views::touch("aq");
         views::touch("aq-log");
     });
-    views::register(Def { name: "runners", docs: &[], dirs: cockpit_runners::gui::dirs, build: cockpit_runners::gui::view, act: |_, _| None });
+    views::register(Def { name: "runners", docs: &[], dirs: cockpit_runners::gui::dirs, build: cockpit_runners::gui::view, act: cockpit_runners::gui::act });
     cockpit_runners::gui::start(|| views::touch("runners"));
     views::register(Def { name: "options", docs: &[], dirs: Vec::new, build: crate::options::view, act: crate::options::act });
     views::register(Def {
