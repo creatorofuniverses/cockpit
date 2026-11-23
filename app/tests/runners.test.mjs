@@ -92,6 +92,55 @@ test("j and k walk the servers", async () => {
   assert.equal(v.key({ keystroke: "x" }, cx), false);
 });
 
+test("the Autoscale line says what the service says", async () => {
+  const f = await fixture();
+  const m = await model();
+  assert.equal(f.runners.autoscaleLine(m), "on · max 3 (config, cap 6) · trigger ≥3 waiting or 10m · last 2m ago: 5 waiting → created 2");
+  assert.equal(f.runners.autoscaleLine({ ...m, autoscale: { ...m.autoscale, on: false } }), "autoscale off in config");
+  const paused = f.runners.autoscaleLine({ ...m, autoscale: { ...m.autoscale, paused: true, paused_by: "cockpit", paused_ago: "5m" } });
+  assert.ok(paused.startsWith("paused by cockpit 5m ago"), paused);
+  assert.equal(f.runners.autoscaleLine({ ...m, autoscale: null }), null);
+});
+
+test("the Autoscale controls follow the service's state and features", async () => {
+  const f = await fixture();
+  const m = await model();
+  const all = (a) => f.runners.autoscaleControls({ ...m, autoscale: { ...m.autoscale, ...a } });
+  const ids = (a) => plain(all(a).map((c) => c.id));
+  assert.deepEqual(ids({}), ["pause", "less", "more"]);
+  assert.deepEqual(ids({ max_source: "set-max" }), ["pause", "less", "more", "reset"]);
+  assert.deepEqual(ids({ paused: true }), ["resume", "less", "more"]);
+  assert.deepEqual(ids({ can_pause: false }), ["less", "more"]);
+  assert.deepEqual(ids({ can_set_max: false, max_source: "set-max" }), ["pause"]);
+  assert.deepEqual(ids({ on: false }), []);
+  assert.equal(all({ max: 0 }).find((c) => c.id === "less").disabled, true);
+  assert.equal(all({ max: 6 }).find((c) => c.id === "more").disabled, true);
+  assert.equal(all({}).find((c) => c.id === "less").disabled, false);
+  assert.equal(all({}).find((c) => c.id === "pause").key, "p");
+});
+
+test("p, plus, minus and 0 send the autoscale acts, once at a time", async () => {
+  const f = await fixture();
+  const m = await model();
+  const press = (a, keystrokes) => {
+    const v = view(f, { ...m, autoscale: { ...m.autoscale, ...a } });
+    const sent = [];
+    v.send = (_cx, action, args) => sent.push(plain([action, args]));
+    const cx2 = { notify() {}, spawn: (fn) => fn(cx2) };
+    for (const keystroke of keystrokes) v.key({ keystroke }, cx2);
+    return sent;
+  };
+  assert.deepEqual(press({}, ["p"]), [["pause", []]]);
+  assert.deepEqual(press({ paused: true }, ["p"]), [["resume", []]]);
+  assert.deepEqual(press({}, ["+"]), [["set-max", [4]]]);
+  assert.deepEqual(press({}, ["="]), [["set-max", [4]]]);
+  assert.deepEqual(press({}, ["-"]), [["set-max", [2]]]);
+  assert.deepEqual(press({}, ["0"]), []);
+  assert.deepEqual(press({ max_source: "set-max" }, ["0"]), [["reset-max", []]]);
+  assert.deepEqual(press({ max: 0 }, ["-"]), []);
+  assert.deepEqual(press({}, ["p", "+", "-"]), [["pause", []]]);
+});
+
 test("no queue tile when the service sends none", async () => {
   const f = await fixture();
   const m = await model();

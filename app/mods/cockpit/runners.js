@@ -5,7 +5,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import * as hub from "./hub.js";
-import { tokens, TEXT, RADIUS, Icon, Badge, PageHeader, KeyHints, Empty, ErrorState, Skeleton, Scroller, SidePanel, Mono, Metric, Tiles, alpha } from "./ui.js";
+import { tokens, TEXT, RADIUS, Icon, Badge, Button, PageHeader, KeyHints, Toaster, Empty, ErrorState, Skeleton, Scroller, SidePanel, Mono, Metric, Tiles, alpha } from "./ui.js";
 
 const SIDE_AT = 960;
 const STATS_NOTE = "Stats over a period will show here once ci-runners has stats --json.";
@@ -37,6 +37,49 @@ export function tiles(model) {
   if (t.queued != null) out.push({ id: "queued", label: "Queued", value: t.queued, icon: "hourglass", hint: t.queue_ago ? `as of ${t.queue_ago} ago` : undefined, hintWarn: Boolean(t.queue_stale) });
   if (t.cost != null) out.push({ id: "cost", label: "Cost now", value: t.cost, icon: "gauge", hint: "estimate" });
   return out;
+}
+
+/** The strip's words as parts, each marked when the service's tone calls for the warning colour; null without an autoscale block. */
+export function autoscaleParts(model) {
+  const a = model?.autoscale;
+  if (!a) return null;
+  if (!a.on) return [{ text: "autoscale off in config", warn: false }];
+  const head = a.paused ? ["paused", a.paused_by ? `by ${a.paused_by}` : null, a.paused_ago ? `${a.paused_ago} ago` : null].filter(Boolean).join(" ") : "on";
+  const last = a.last ? `last ${a.last.ago ? `${a.last.ago} ago: ` : ": "}${a.last.text}` : null;
+  return [
+    { text: head, warn: Boolean(a.paused) },
+    { text: `max ${a.max} (${a.max_source}, cap ${a.max_vms})`, warn: false },
+    { text: `trigger ${a.trigger}`, warn: false },
+    last ? { text: last, warn: a.last.tone === "warning" } : null,
+  ].filter(Boolean);
+}
+
+/** The strip's words in one line, or null without an autoscale block. */
+export function autoscaleLine(model) {
+  return autoscaleParts(model)?.map((p) => p.text).join(" · ") ?? null;
+}
+
+/** The strip's visible controls: Pause or Resume, max less and more, and Reset once the max was set from here. */
+export function autoscaleControls(model) {
+  const a = model?.autoscale;
+  if (!a?.on) return [];
+  const out = [];
+  if (a.can_pause) out.push(a.paused ? { id: "resume", label: "Resume", key: "p", disabled: false } : { id: "pause", label: "Pause", key: "p", disabled: false });
+  if (a.can_set_max) {
+    out.push({ id: "less", label: "Max −", key: "-", disabled: a.max <= 0 });
+    out.push({ id: "more", label: "Max +", key: "+", disabled: a.max >= a.max_vms });
+    if (a.max_source === "set-max") out.push({ id: "reset", label: "Reset max", key: "0", disabled: false });
+  }
+  return out;
+}
+
+/** The hub act a control sends: its action and arguments. */
+function autoscaleAct(model, id) {
+  const max = model.autoscale.max;
+  if (id === "less") return ["set-max", [max - 1]];
+  if (id === "more") return ["set-max", [max + 1]];
+  if (id === "reset") return ["reset-max", []];
+  return [id, []];
 }
 
 /** A server's phase in words. */
@@ -90,6 +133,8 @@ export default class Runners {
     this.width = 1200;
     this.height = 800;
     this.scroller = new Scroller();
+    this.toasts = new Toaster();
+    this.busy = false;
     this.handle = cx.focus_handle();
     this.sub = hub.subscribe(
       cx,
@@ -143,13 +188,85 @@ export default class Runners {
     const s = e.keystroke;
     if (s === "j" || s === "down") this.move(1, cx);
     else if (s === "k" || s === "up") this.move(-1, cx);
-    else return false;
+    else {
+      const want = { p: "p", "+": "more", "=": "more", "shift-=": "more", "shift-+": "more", "-": "less", "0": "reset" }[s];
+      if (!want) return false;
+      const c = autoscaleControls(this.model).find((x) => (want === "p" ? x.key === "p" : x.id === want));
+      if (c && !c.disabled) this.run(c.id, cx);
+      return true;
+    }
     cx.notify();
     return true;
   }
 
+  /** Sends an autoscale control's act to the hub, unless one is already running. */
+  run(id, cx) {
+    if (this.busy) return;
+    const [action, args] = autoscaleAct(this.model, id);
+    this.busy = true;
+    cx.notify();
+    cx.spawn(async (cx) => this.send(cx, action, args));
+  }
+
+  async send(cx, action, args) {
+    try {
+      const r = await hub.act("runners", action, args);
+      if (r.error) this.toasts.push(cx, r.error, { kind: "error" });
+      else if (r.note) this.toasts.push(cx, r.note, { kind: "success" });
+    } catch (e) {
+      this.toasts.push(cx, "The hub did not answer", { kind: "error", description: String(e?.message ?? e) });
+    }
+    this.busy = false;
+    cx.notify();
+  }
+
   // -------------------------------------------------------------------------------------------------------------------
   // Drawing
+
+  /** The Autoscale strip: its words, warning-coloured where the service says so, and its buttons. */
+  autoscale(k) {
+    const parts = autoscaleParts(this.model);
+    if (!parts) return null;
+    const controls = autoscaleControls(this.model);
+    return h_flex()
+      .id("runners-autoscale")
+      .gap(12)
+      .px(12)
+      .py(8)
+      .items_center()
+      .rounded(RADIUS.md)
+      .border_1()
+      .border_color(k.border)
+      .child(div().flex_none().text_size(TEXT.sm).font_medium().child("Autoscale"))
+      .child(
+        h_flex()
+          .flex_1()
+          .min_w(0)
+          .gap(6)
+          .flex_wrap()
+          .text_size(TEXT.xs)
+          .children(parts.map((p, i) => div().text_color(p.warn ? k.warning : k.mutedFg).child(i ? `· ${p.text}` : p.text))),
+      )
+      .when(controls.length > 0, (e) =>
+        e.child(
+          h_flex()
+            .gap(6)
+            .flex_none()
+            .children(
+              controls.map((c) =>
+                Button(`runners-autoscale-${c.id}`, {
+                  label: c.label,
+                  kbd: c.key,
+                  size: "sm",
+                  variant: "outline",
+                  disabled: c.disabled || this.busy,
+                  onClick: (_e, cx) => this.run(c.id, cx),
+                }),
+              ),
+            ),
+        ),
+      );
+  }
 
   tiles() {
     return Tiles(tiles(this.model).map((t) => Metric(`runners-tile-${t.id}`, { label: t.label, value: t.value, icon: t.icon, hint: t.hint, hintTone: t.hintWarn ? tokens().warning : undefined })));
@@ -294,6 +411,7 @@ export default class Runners {
               .gap(12)
               .flex_none()
               .child(this.warnings(k) ?? div())
+              .child(this.autoscale(k) ?? div())
               .when(Boolean(asOf), (e) => e.child(div().text_size(TEXT.xs).text_color(k.warning).child(asOf)))
               .when(Boolean(failed), (e) => e.child(div().text_size(TEXT.xs).text_color(k.warning).whitespace_normal().child(failed)))
               .child(v_flex().when(stale, (e) => e.opacity(0.5)).child(this.tiles())),
@@ -326,7 +444,7 @@ export default class Runners {
     const m = this.model;
     const description = m?.state === "live" ? m.line?.text : "Cloud CI runners from ci-runners";
     const tick = m?.tick;
-    return v_flex()
+    const out = v_flex()
       .id("runners")
       .track_focus(this.handle)
       .size_full()
@@ -357,6 +475,8 @@ export default class Runners {
         }),
       )
       .child(this.body(k))
-      .child(KeyHints([["j k", "move"]]));
+      .child(KeyHints([["j k", "move"], ...autoscaleControls(m).filter((c) => !c.disabled).map((c) => [c.key, c.label.toLowerCase()])]));
+    const toasts = this.toasts.render();
+    return toasts ? out.child(toasts) : out;
   }
 }
