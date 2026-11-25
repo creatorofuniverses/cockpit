@@ -41,6 +41,17 @@ export function autoApps(spaces, states) {
 }
 const DEFAULT_SPACES = ["inbox", "terminal", "actions", "to-do", "runbook", "meetings"];
 
+/** A remote space's attention dot includes finished agents detected by its hub. */
+export function spaceAttention(space, panes, byAddress) {
+  const status = agentStatus(space.status);
+  if (["blocked", "failed", "done"].includes(status)) return status;
+  const tabs = new Set((space.tabs ?? []).map((t) => t.id));
+  return panes.some((p) => {
+    const row = byAddress.get(p.terminal);
+    return tabs.has(p.tab) && row?.remote && row.stage === "done";
+  }) ? "done" : null;
+}
+
 /** The fields of each app's view that appBadge reads (and aq's state): the hub sends these alone, when they move. */
 const BADGE_FIELDS = {
   todo: ["open"],
@@ -649,12 +660,13 @@ export default class Sidebar {
       if (r.repo && !r.repo.linked) for (const kid of info.filter((x) => nested(x) && x.repo.common === r.repo.common)) ordered.push({ ...kid, tree: true });
     }
     const machineNames = [...new Set([...sp.map(s => s.machine).filter(Boolean), ...machines().map(m => m.name).filter(Boolean), ...this.machineList.map(m => m.name)])].sort();
+    const byAddress = new Map(this.agents.rows.map((r) => [r.address, r]));
     const row = ({ s, i, tree }) => {
       const on = s.active && (shared("cockpit.app") ?? "work") === "work";
       const fill = colors[s.id] ?? k.ring;
       const dragging = this.drag && this.drag.from === i;
       const over = this.drag && this.drag.over === i && this.drag.from !== i;
-      const urgent = ["blocked", "failed", "done"].includes(agentStatus(s.status));
+      const attention = spaceAttention(s, ps, byAddress);
       return h_flex()
         .id(`space-${s.id}`)
         .relative()
@@ -701,11 +713,10 @@ export default class Sidebar {
         .child(div().flex_shrink_1().min_w(0).truncate().font_medium().child(s.name))
         .child(div().flex_1())
         .when(Boolean(s.branch) && !["main", "master"].includes(s.branch) && s.branch !== s.name, (e) => e.child(div().max_w(96).truncate().text_size(TEXT.xs).text_color(k.dim).child(s.branch)))
-        .when(urgent, (e) => e.child(div().size(7).flex_none().rounded(4).bg(statusColor(k, agentStatus(s.status)))))
+        .when(Boolean(attention), (e) => e.child(div().size(7).flex_none().rounded(4).bg(statusColor(k, attention))))
         .when(hasTerms(s), (e) => e.child(this.foldButton(k, s, folded)));
     };
     // Each space's terminal lines fold away, one space with its chevron or all of them from the header.
-    const byAddress = new Map(this.agents.rows.map((r) => [r.address, r]));
     const folded = new Set(shared("cockpit.spaces.folded") ?? []);
     const hasTerms = (s) => this.termRows(k, s, ps, byAddress, false).length > 0;
     const withLines = ordered.filter((r) => hasTerms(r.s));
@@ -857,7 +868,10 @@ export default class Sidebar {
   /** The rail: a dot per waiting agent, then the spaces as avatars with their status. */
   railRows(k, rows) {
     const waiting = rows.filter((r) => r.stage === "needs_you");
-    const colors = this.spaceColors(spaces());
+    const sp = spaces();
+    const ps = panes();
+    const byAddress = new Map(rows.map((r) => [r.address, r]));
+    const colors = this.spaceColors(sp);
     return [
       ...waiting.map((r) =>
         h_flex()
@@ -872,8 +886,9 @@ export default class Sidebar {
           .on_click((_e, cx) => this.agents.go(cx, r))
           .child(StageMark(`rail-${r.terminal}`, "needs_you", { size: 9 })),
       ),
-      ...spaces().map((s) =>
-        h_flex()
+      ...sp.map((s) => {
+        const attention = spaceAttention(s, ps, byAddress);
+        return h_flex()
           .id(`rail-space-${s.id}`)
           .h(30)
           .relative()
@@ -889,8 +904,8 @@ export default class Sidebar {
             showSpace(s.id);
           })
           .child(h_flex().size(20).rounded(5).bg(colors[s.id] ?? k.ring).items_center().justify_center().text_size(11).font_bold().text_color("#ffffff").child([...s.name][0]?.toUpperCase() ?? "?"))
-          .when(["blocked", "failed", "done"].includes(agentStatus(s.status)), (e) => e.child(div().absolute().top(3).right(8).size(7).rounded(4).bg(statusColor(k, agentStatus(s.status))))),
-      ),
+          .when(Boolean(attention), (e) => e.child(div().absolute().top(3).right(8).size(7).rounded(4).bg(statusColor(k, attention))));
+      }),
     ];
   }
 }

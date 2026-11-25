@@ -21,17 +21,17 @@ export function agentStatus(raw) {
   return KNOWN.includes(raw) ? raw : "blocked";
 }
 
-/** Each terminal's status as this desktop's Herdr shows it, a runner's under its machine-scoped address (`runner/t7`). */
+/** This desktop's terminals and their reported agent status, or null for a pane with no report. */
 function deskStatus() {
-  const status = new Map();
-  for (const s of spaces() ?? []) for (const t of s.tabs ?? []) for (const x of t.terminals ?? []) if (x.terminal) status.set(x.terminal, x.status);
-  for (const p of panes() ?? []) if (p.terminal && !status.has(p.terminal)) status.set(p.terminal, p.status);
-  return status;
+  const reported = new Map((agents() ?? []).filter((a) => KNOWN.includes(a.status) || a.status === "error").map((a) => [a.address, a.status]));
+  const visible = new Map();
+  const add = (t) => { if (t.terminal) visible.set(t.terminal, reported.get(t.terminal) ?? null); };
+  for (const s of spaces() ?? []) for (const t of s.tabs ?? []) for (const x of t.terminals ?? []) add(x);
+  for (const p of panes() ?? []) add(p);
+  return visible;
 }
 
-/** The agents view's rows, whatever the list is called in its model. A runner's rows take their address on this desktop,
- * and whether they are done and unread from this desktop's Herdr: the runner never learns which agents you opened here,
- * so its own word stays done for good; once Herdr here shows the terminal otherwise, the row rests (idle). */
+/** A runner's rows take their desktop address and use Herdr's acknowledgement when the agent reports to Herdr. */
 export function rowsOf(value) {
   const rows = Array.isArray(value) ? value : value?.agents ?? value?.rows ?? [];
   if (!value?.remote) return rows;
@@ -39,8 +39,8 @@ export function rowsOf(value) {
   return rows.map((r) => {
     const address = `${value.remote}/${addressOf(r)}`;
     const desk = status.get(address);
-    const rests = r.stage === "done" && desk !== undefined && desk !== "done";
-    return { ...r, remote: value.remote, address, terminal: `app:${address}`, stage: rests ? "idle" : r.stage, unread: Boolean(r.unread) && desk === "done" };
+    const rests = r.stage === "done" && desk != null && desk !== "done";
+    return { ...r, remote: value.remote, address, terminal: `app:${address}`, stage: rests ? "idle" : r.stage, unread: Boolean(r.unread) && (desk === null || desk === "done") };
   });
 }
 

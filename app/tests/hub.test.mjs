@@ -53,7 +53,7 @@ async function fixture(t, remote = true, globals = {}, host = "127.0.0.1") {
         if (path === "C:/Herdr/cockpit.json") return JSON.stringify(install);
         if (path.endsWith("/hub.stopped")) return behavior.stopped ? "" : null;
         assert.equal(options?.on, install.machine);
-        if (path.endsWith("/config.json")) return behavior.configFiles?.[path] ?? null;
+        if (path.endsWith("/config.json")) return behavior.readConfig ? behavior.readConfig(path) : behavior.configFiles?.[path] ?? null;
         if (behavior.noInfo) return null;
         return JSON.stringify(info);
       },
@@ -669,5 +669,21 @@ test("pinned spaces load when the hub reconnects and survive a failed read", asy
   delete f.behavior.configFiles;
   onState("live", r.cx);
   await Promise.all(r.tasks);
+  assert.deepEqual(lists, [["inbox", "to-do"]]);
+});
+
+test("reconnects coalesce while a remote configuration read is stuck", async t => {
+  const f = await fixture(t), r = runtime(t), lists = [];
+  let release;
+  let reads = 0;
+  f.behavior.readConfig = () => (++reads === 1 ? new Promise(resolve => { release = resolve; }) : '{"spaces":["inbox","to-do"]}');
+  const onState = f.hub.followPinnedSpaces(r.cx, spaces => lists.push(Array.from(spaces)));
+  await until(() => release);
+  for (let i = 0; i < 20; i++) onState("live", r.cx);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reads, 1, "one pending file read even after twenty reconnects");
+  release('{"spaces":["inbox","runbook","meetings"]}');
+  await Promise.all(r.tasks);
+  assert.equal(reads, 2, "one new read covers all the reconnects");
   assert.deepEqual(lists, [["inbox", "to-do"]]);
 });

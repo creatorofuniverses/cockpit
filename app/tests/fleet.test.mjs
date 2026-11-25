@@ -43,7 +43,7 @@ async function fixture(layout = "cockpit", live = null, desktop = {}) {
     modules.set(name, module);
     return module;
   }
-  const module = new SourceTextModule('export * from "./fleet.js"; export { default as Home } from "./home.js"; export { default as Sidebar } from "./sidebar.js"; export { AgentsModel } from "./agentsui.js"; export { default as Needs } from "./needs.js";', { context });
+  const module = new SourceTextModule('export * from "./fleet.js"; export { default as Home } from "./home.js"; export { default as Sidebar, spaceAttention } from "./sidebar.js"; export { AgentsModel } from "./agentsui.js"; export { default as Needs } from "./needs.js";', { context });
   await module.link(load);
   await module.evaluate();
   return { fleet: module.namespace, calls, notices };
@@ -76,7 +76,7 @@ test("a runner's t7 stays separate from local t7 and Go focuses the runner's ter
 });
 
 test("a runner's agent stays done and unread only while this desktop's Herdr still shows it done", async () => {
-  const f = await fixture();
+  const f = await fixture("cockpit", [{ address: "runner/t7", status: "done" }, { address: "runner/t8", status: "idle" }]);
   const model = {
     remote: "runner",
     counts: { unread: 3 },
@@ -89,6 +89,24 @@ test("a runner's agent stays done and unread only while this desktop's Herdr sti
   assert.deepEqual(JSON.parse(JSON.stringify(f.fleet.rowsOf(model).map((r) => `${r.address} ${r.stage} ${r.unread}`))), ["runner/t7 done true", "runner/t8 idle false", "runner/t9 done false"]);
   assert.equal(f.fleet.countsOf(model).unread, 1);
   assert.equal(f.fleet.countsOf({ counts: { unread: 3 }, agents: model.agents }).unread, 3);
+});
+
+test("a plain Herdr pane cannot clear a runner's finished OpenClaude or Codex turn", async () => {
+  const pane = (terminal, status) => ({ terminal, tab: "runner/tab", status });
+  const panes = [pane("runner/t7", "idle"), pane("runner/t8", null)];
+  const space = { status: "idle", tabs: [{ id: "runner/tab", terminals: panes }] };
+  const f = await fixture("cockpit", [], { spaces: [space], panes });
+  const row = (address, agent) => ({ address, agent, status: "done", stage: "done", unread: true });
+  const model = { remote: "runner", agents: [row("t7", "openclaude"), row("t8", "codex")] };
+  const rows = f.fleet.rowsOf(model);
+  assert.deepEqual(Array.from(rows, r => `${r.agent} ${r.stage} ${r.unread}`), ["openclaude done true", "codex done true"]);
+  assert.equal(f.fleet.countsOf(model).unread, 2);
+  const byAddress = new Map(Array.from(rows, r => [r.address, r]));
+  assert.equal(f.fleet.spaceAttention(space, panes, byAddress), "done");
+  assert.equal(f.fleet.spaceAttention({ ...space, status: "blocked" }, panes, byAddress), "blocked");
+  assert.equal(f.fleet.spaceAttention(space, panes, new Map()), null);
+  const local = new Map(Array.from(rows, r => [r.address, { ...r, remote: undefined }]));
+  assert.equal(f.fleet.spaceAttention(space, panes, local), null, "local spaces keep their own Herdr acknowledgement");
 });
 
 test("an agent is titled by the hub's name for it, else Herdr's title, never by a tab label read a second way", async () => {

@@ -148,14 +148,26 @@ export async function pinnedSpaces() {
   return null;
 }
 
-/** Reads the space selection at startup and on connection, keeping the last good selection during a failed read. */
+/** Reads the space selection at startup and on connection, with at most one pending read per view. */
 export function followPinnedSpaces(cx, onSpaces) {
-  let request = 0;
+  let reading = false;
+  let again = false;
   const refresh = (cx) => {
-    const attempt = ++request;
+    if (reading) {
+      again = true;
+      return;
+    }
+    reading = true;
     cx.spawn(async (cx) => {
-      const spaces = await pinnedSpaces().catch(() => null);
-      if (spaces !== null && attempt === request) onSpaces(spaces, cx);
+      try {
+        do {
+          again = false;
+          const spaces = await pinnedSpaces().catch(() => null);
+          if (!again && spaces !== null) onSpaces(spaces, cx);
+        } while (again);
+      } finally {
+        reading = false;
+      }
     });
   };
   refresh(cx);
