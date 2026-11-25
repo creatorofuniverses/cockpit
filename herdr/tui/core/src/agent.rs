@@ -1,8 +1,9 @@
-//! The coding agents cockpit starts, resumes, forks and runs headless, one entry per agent Herdr integrates, with argv
+//! The coding agents cockpit starts, resumes, forks and runs headless, with argv
 //! templates the config's `agents.commands` overrides. A template argument whose `{prompt}`, `{session}` or `{model}`
 //! has no value is dropped whole, so `start(None)` opens the agent at its prompt and `"-i {prompt}"` goes as one.
 
 use std::path::Path;
+use std::process::{Command, Stdio};
 
 use serde_json::Value;
 
@@ -15,6 +16,8 @@ pub enum Transcripts {
     None,
     /// `~/.claude/projects/<cwd>/<session>.jsonl`
     Claude,
+    /// `~/.openclaude/projects/<cwd>/<session>.jsonl`
+    OpenClaude,
     /// `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`
     Codex,
     /// `~/.pi/agent/sessions/--<cwd>--/<time>_<session>.jsonl`
@@ -455,7 +458,7 @@ fn control(list: &[&str]) -> Option<Vec<String>> {
     (!list.is_empty()).then(|| v(list))
 }
 
-/// The built-in table, before the config's overrides. Agents Herdr integrates; see `herdr integration --help`.
+/// The built-in table, before the config's overrides.
 pub fn builtin() -> Vec<Agent> {
     ROWS.iter()
         .map(|row| {
@@ -497,6 +500,23 @@ const ROWS: &[Row] = &[
         system: &["--append-system-prompt", "{text}"],
         models: &["haiku", "sonnet", "opus", "lightest", "light", "claude-"],
         transcripts: Transcripts::Claude,
+    },
+    Row {
+        id: "openclaude",
+        name: "OpenClaude",
+        bin: "openclaude",
+        aliases: NONE,
+        start: &["{bin}", "{prompt}"],
+        run: &["{bin}", "-p", "{prompt}"],
+        model: &["--model", "{model}"],
+        resume: &["{bin}", "--resume", "{session}", "{prompt}"],
+        fork: &["{bin}", "--resume", "{session}", "--fork-session", "{prompt}"],
+        run_fork: &["{bin}", "-p", "--resume", "{session}", "--fork-session", "{prompt}"],
+        edits: &["--permission-mode", "acceptEdits"],
+        add_dir: &["--add-dir", "{dir}"],
+        system: &["--append-system-prompt", "{text}"],
+        models: NONE,
+        transcripts: Transcripts::OpenClaude,
     },
     Row {
         id: "codex",
@@ -1104,6 +1124,17 @@ pub fn of_program(program: &str) -> Option<Agent> {
     all().into_iter().find(|a| a.id == p || a.bin == p || a.name.to_ascii_lowercase() == p || a.aliases.iter().any(|x| x.to_ascii_lowercase() == p))
 }
 
+fn process_name(value: &Value) -> &str {
+    Path::new(value.as_str().unwrap_or_default()).file_name().and_then(|name| name.to_str()).unwrap_or_default()
+}
+
+/// An agent that cockpit identifies itself, from the foreground command's name or executable.
+pub fn foreground(process: &Value) -> Option<Agent> {
+    let executable = process_name(&process["argv"][0]);
+    let script = matches!(executable, "node" | "bun").then(|| process_name(&process["argv"][1]));
+    [Some(process_name(&process["name"])), Some(executable), script].into_iter().flatten().filter(|name| *name == Transcripts::OpenClaude.agent()).find_map(get)
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Logos
 
@@ -1229,6 +1260,21 @@ fn runs(p: &Path) -> bool {
 }
 
 impl Agent {
+    /// Whether cockpit identifies this agent from the terminal's foreground process when Herdr reports no agent.
+    pub fn probe_foreground(&self) -> bool {
+        self.id == Transcripts::OpenClaude.agent()
+    }
+
+    /// The process that writes the session registry when the frontend exposes a launcher.
+    pub fn session_pid(&self, process: &Value) -> Option<u64> {
+        let pid = process["pid"].as_u64()?;
+        if !self.probe_foreground() || process_name(&process["name"]) == self.id || foreground(process).is_none() {
+            return Some(pid);
+        }
+        let child = Command::new("pgrep").args(["-P", &pid.to_string(), "-x", &self.id]).stderr(Stdio::null()).output().ok();
+        child.and_then(|out| String::from_utf8(out.stdout).ok()?.lines().next()?.parse().ok()).or(Some(pid))
+    }
+
     /// Whether cockpit's own plugin serves it, rather than its MCP config.
     pub fn has_plugin(&self) -> bool {
         PLUGIN.contains(&self.id.as_str())
@@ -1936,6 +1982,16 @@ mod tests {
         let unique: std::collections::HashSet<&str> = table.iter().map(|a| a.id.as_str()).collect();
         assert_eq!(unique.len(), table.len(), "one row per agent");
         assert!(table.iter().all(|a| a.can_run() && !a.resume.is_empty()), "every agent runs headless and resumes");
+    }
+
+    #[test]
+    fn openclaude_has_its_own_launch_and_resume_commands() {
+        let a = row("openclaude");
+        assert_eq!(a.start_argv(Some("Ship ENG-412"), Some("acme/model")), ["/bin/openclaude", "Ship ENG-412", "--model", "acme/model"]);
+        assert_eq!(a.resume_argv("a1b2").unwrap(), ["/bin/openclaude", "--resume", "a1b2"]);
+        assert_eq!(a.fork_argv("a1b2").unwrap(), ["/bin/openclaude", "--resume", "a1b2", "--fork-session"]);
+        assert_eq!(run(&a, "Ship ENG-412", None).unwrap(), ["/bin/openclaude", "-p", "Ship ENG-412"]);
+        assert_eq!(a.transcripts.agent(), "openclaude");
     }
 
     #[test]

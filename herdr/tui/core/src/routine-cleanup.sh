@@ -36,6 +36,7 @@ agents=$(tr -d '\n' < "$HOME/.cache/cockpit/agents.json" 2>/dev/null | tr '}' '\
 name_of() {
   case $1 in
     claude|claude-code) echo "Claude Code" ;;
+    openclaude) echo "OpenClaude" ;;
     codex) echo "Codex" ;;
     pi) echo "Pi" ;;
     omp) echo "Oh My Pi" ;;

@@ -169,6 +169,17 @@ test("logo drawing takes picture metadata from Herdr, brand colours in both layo
   assert.equal(ui.CHAT_LOGO_STYLE, "brand");
 });
 
+test("OpenClaude has its own mark with a hub that sends the neutral icon", async () => {
+  const ui = await usage("./ui.js");
+  for (const row of [{ agent: "openclaude", icon: "agent" }, { id: "openclaude", icon: "agent" }, { program: { key: "openclaude" } }, "openclaude"]) {
+    for (const mono of [false, true]) {
+      const spec = ui.agentLogoSpec(row, { mono, programs: [] });
+      assert.equal(spec.name, "openclaude");
+      assert.equal(spec.path, "mods/cockpit/icons/agents/openclaude.svg");
+      assert.equal(spec.picture, false);
+    }
+  }
+});
 
 function drawing() {
   const state = new Map([["layout", "cockpit"]]);

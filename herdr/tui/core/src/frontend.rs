@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-use crate::files;
+use crate::{agent, files};
 
 /// Why a command for the Herdr window did not give an answer.
 #[derive(Debug, Clone, PartialEq)]
@@ -359,6 +359,12 @@ pub fn herdr(args: &[&str]) -> Option<Value> {
     serde_json::from_slice::<Value>(&out.stdout).ok()?.get("result").filter(|r| !r.is_null()).cloned()
 }
 
+/// An agent cockpit recognizes in a pane's foreground process group.
+pub fn pane_foreground(pane: &str) -> Option<(agent::Agent, Value)> {
+    let info = herdr(&["pane", "process-info", "--pane", pane])?;
+    info["process_info"]["foreground_processes"].as_array()?.iter().find_map(|p| Some((agent::foreground(p)?, p.clone())))
+}
+
 /// herdr's spaces, each label stripped of its "[N] " prefix.
 fn tui_spaces() -> Vec<Value> {
     let listed = herdr(&["workspace", "list"]).and_then(|r| r["workspaces"].as_array().cloned()).unwrap_or_default();
@@ -580,8 +586,11 @@ pub fn app_prompt(terminal: &str, text: &str) -> bool {
 /// Whether the handle's terminal still runs an agent: herdr's pane, or the app's live terminal, says which agent.
 pub fn alive(handle: &str) -> bool {
     match handle.strip_prefix(APP) {
-        Some(terminal) => hc(&["ls"]).is_some_and(|l| runs_agent(&l, terminal)),
-        None => herdr(&["pane", "get", handle]).is_some_and(|f| truthy(&f["pane"]["agent"])),
+        Some(terminal) => {
+            hc(&["ls"]).is_some_and(|l| runs_agent(&l, terminal))
+                || hc(&["get", terminal]).is_some_and(|t| t["state"] == "live" && agent::foreground(&t["foreground"]).is_some())
+        }
+        None => herdr(&["pane", "get", handle]).is_some_and(|f| truthy(&f["pane"]["agent"]) || pane_foreground(handle).is_some()),
     }
 }
 

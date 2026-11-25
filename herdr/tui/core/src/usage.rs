@@ -1575,7 +1575,14 @@ fn started(path: &Path) -> String {
 pub fn counts_tokens(kind: Transcripts) -> bool {
     matches!(
         kind,
-        Transcripts::Claude | Transcripts::Codex | Transcripts::Pi | Transcripts::Omp | Transcripts::Qwen | Transcripts::Copilot | Transcripts::Gemini
+        Transcripts::Claude
+            | Transcripts::OpenClaude
+            | Transcripts::Codex
+            | Transcripts::Pi
+            | Transcripts::Omp
+            | Transcripts::Qwen
+            | Transcripts::Copilot
+            | Transcripts::Gemini
     )
 }
 
@@ -1694,7 +1701,7 @@ fn scan_file(s: &mut Scanner, path: &Path, agent: &str, kind: Transcripts, start
             }
             f.offset += n as u64;
             match kind {
-                Transcripts::Claude => claude_line(&mut f, &mut s.counted, &s.owners, &line),
+                Transcripts::Claude | Transcripts::OpenClaude => claude_line(&mut f, &mut s.counted, &s.owners, &line, kind),
                 Transcripts::Codex => codex_line(&mut f, &mut s.counted, &line),
                 Transcripts::Pi | Transcripts::Omp => pi_line(&mut f, &mut s.counted, &line),
                 Transcripts::Qwen => qwen_line(&mut f, &mut s.counted, &line),
@@ -1713,7 +1720,14 @@ fn scan_file(s: &mut Scanner, path: &Path, agent: &str, kind: Transcripts, start
 
 /// A Claude call's tokens and day, once per message: Claude Code writes a message once per content block, the same
 /// usage on each, and a fork repeats its parent's, which stays the session's `owners` names.
-fn claude_call(line: &[u8], counted: &mut HashSet<u64>, owners: &HashMap<u64, String>, session: &str, ids: &mut Vec<u64>) -> Option<(String, String, Tokens)> {
+fn claude_call(
+    line: &[u8],
+    counted: &mut HashSet<u64>,
+    owners: &HashMap<u64, String>,
+    session: &str,
+    ids: &mut Vec<u64>,
+    kind: Transcripts,
+) -> Option<(String, String, Tokens)> {
     if !contains(line, b"\"usage\"") || !contains(line, b"\"assistant\"") {
         return None;
     }
@@ -1724,17 +1738,24 @@ fn claude_call(line: &[u8], counted: &mut HashSet<u64>, owners: &HashMap<u64, St
         return None;
     }
     if let Some(id) = m.id {
-        let key = hashed(&[id.as_bytes(), l.request_id.unwrap_or_default().as_bytes()]);
+        let request = l.request_id.unwrap_or_default();
+        let key = if kind == Transcripts::Claude {
+            hashed(&[id.as_bytes(), request.as_bytes()])
+        } else {
+            hashed(&[kind.agent().as_bytes(), id.as_bytes(), request.as_bytes()])
+        };
         if owners.get(&key).is_some_and(|owner| owner != session) || !counted.insert(key) {
             return None;
         }
         ids.push(key);
     }
-    Some((date_of(&stamp)?, model.clone(), claude_tokens(&model, &u)))
+    // The same model can have different prices across OpenClaude's providers.
+    let tokens = claude_tokens(if kind == Transcripts::Claude { &model } else { "" }, &u);
+    Some((date_of(&stamp)?, model, tokens))
 }
 
-fn claude_line(f: &mut Scanned, counted: &mut HashSet<u64>, owners: &HashMap<u64, String>, line: &[u8]) {
-    let Some((date, model, t)) = claude_call(line, counted, owners, &f.session, &mut f.ids) else { return };
+fn claude_line(f: &mut Scanned, counted: &mut HashSet<u64>, owners: &HashMap<u64, String>, line: &[u8], kind: Transcripts) {
+    let Some((date, model, t)) = claude_call(line, counted, owners, &f.session, &mut f.ids, kind) else { return };
     f.usd += t.cost;
     if t.unpriced > 0 {
         f.unpriced.insert((date.clone(), base_model(&model).to_string()));

@@ -362,7 +362,7 @@ pub fn read(kind: Transcripts, path: &Path) -> Option<Read> {
         followed.clear();
     }
     let (follow, at, kept) = followed.entry(path.to_path_buf()).or_insert_with(|| (Follow::new(kind, path, Detail::Names), None, None));
-    if kind != Transcripts::Claude && at.is_some_and(|t| t.elapsed() < REREAD) {
+    if !kind.claude_jsonl() && at.is_some_and(|t| t.elapsed() < REREAD) {
         return kept.clone();
     }
     *at = Some(Instant::now());

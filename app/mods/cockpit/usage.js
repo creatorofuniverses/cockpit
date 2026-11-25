@@ -70,7 +70,7 @@ export function byProvider(quota, running = []) {
     const agent = q.agent ?? q.provider ?? "";
     if (!agent || agent === "agent") continue;
     let g = groups.find((x) => x.agent === agent);
-    if (!g) groups.push((g = { agent, icon: iconOf(q.icon ?? "agent"), name: q.provider ?? agent, windows: [] }));
+    if (!g) groups.push((g = { agent, icon: iconOf(q), name: q.provider ?? agent, windows: [] }));
     g.windows.push(q);
   }
   for (const r of running ?? []) {
@@ -304,7 +304,7 @@ export default class Usage {
           h_flex()
             .gap(10)
             .items_center()
-            .child(h_flex().size(28).flex_none().items_center().justify_center().rounded(RADIUS.md).bg(k.muted).child(AgentLogo(p.icon ?? "agent", { size: 16 })))
+            .child(h_flex().size(28).flex_none().items_center().justify_center().rounded(RADIUS.md).bg(k.muted).child(AgentLogo(p, { size: 16 })))
             .child(
               v_flex()
                 .flex_1()
@@ -329,7 +329,7 @@ export default class Usage {
     if (!agents.length) return [div().text_size(TEXT.sm).text_color(k.mutedFg).child("No usage data: the transcripts of these days hold no tokens.")];
     const most = Math.max(1, ...t.days.map((d) => d.total?.total ?? 0));
     const provider = (a) => this.value?.providers?.find((p) => p.agent === a);
-    const name = (a) => h_flex().gap(5).items_center().child(AgentLogo(provider(a)?.icon ?? "agent", { size: 12 })).child(provider(a)?.name ?? t.names?.[a] ?? a);
+    const name = (a) => h_flex().gap(5).items_center().child(AgentLogo(provider(a) ?? { agent: a }, { size: 12 })).child(provider(a)?.name ?? t.names?.[a] ?? a);
     const cell = (c) => (c?.total ? `${count(c.total)} · ${price(c)}` : "·");
     // Two agents leave room for the day's bar; more share the row, each column as wide as the others.
     const bars = agents.length <= 2;

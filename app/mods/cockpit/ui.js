@@ -73,13 +73,16 @@ export function Icon(name, { size = 16, color } = {}) {
 export const CHAT_LOGO_STYLE = "brand";
 const PROGRAMS = "cockpit.agent.programs";
 const MONO_LOGOS = new Set(["claude", "codex", "amp", "antigravity", "kimi", "kiro"]);
+const LOCAL_LOGOS = new Set(["openclaude"]);
 
 const iconName = (name) => typeof name === "string" && /^[a-z0-9][a-z0-9-]*$/.test(name) ? name : null;
 const programIcon = (program) => typeof program?.icon === "string" ? iconName(program.icon.replace(/^.*\//, "").replace(/\.svg$/, "")) : null;
 
-/** The hub's useful icon, else Herdr's program icon, else its neutral agent mark. */
+/** Cockpit's own logo, the hub's icon, Herdr's program icon, or the neutral agent mark. */
 export function iconOf(x) {
   if (typeof x === "string") return iconName(x) ?? "agent";
+  const local = [x?.agent, x?.id, x?.program?.key, x?.program].find((name) => LOCAL_LOGOS.has(name));
+  if (local) return local;
   const own = iconName(x?.icon);
   return own && own !== "agent" ? own : programIcon(x?.program) ?? "agent";
 }
@@ -97,6 +100,7 @@ function loadPrograms() {
 /** The logo's path and drawing kind, using Herdr's program table for brand colours. */
 export function agentLogoSpec(x, { mono = layoutName() === "cockpit-chat" && CHAT_LOGO_STYLE === "tinted", programs = shared(PROGRAMS)?.rows ?? [] } = {}) {
   const name = iconOf(x);
+  if (LOCAL_LOGOS.has(name)) return { name, path: `mods/cockpit/icons/agents/${name}.svg`, picture: false };
   const own = x?.program;
   const program = programIcon(own) === name ? own : programs.find((p) => programIcon(p) === name);
   return { name, path: mono && MONO_LOGOS.has(name) ? `mods/cockpit/icons/agents/${name}.svg` : `icons/${name}.svg`, picture: !mono && program?.tint === false };

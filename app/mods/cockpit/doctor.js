@@ -1211,7 +1211,7 @@ export default class Settings {
           h_flex()
             .gap(8)
             .items_center()
-            .child(AgentLogo(a.icon ?? "agent", { size: 16, color: a.installed ? k.foreground : k.mutedFg }))
+            .child(AgentLogo(a, { size: 16, color: a.installed ? k.foreground : k.mutedFg }))
             .child(div().text_size(TEXT.base).font_medium().text_color(a.installed ? k.foreground : k.mutedFg).child(a.name))
             .when(a.default, (e) => e.child(Badge("default", "secondary")))
             .when(!a.installed, (e) => e.child(Badge("not installed", "outline")))

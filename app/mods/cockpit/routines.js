@@ -17,7 +17,7 @@ import { modelChoices, asPills, listHint } from "./models.js";
 import {
   tokens, TEXT, RADIUS, Icon, Badge, Button, Kbd, PageHeader, SearchField, TextField, KeyHints, Empty, Skeleton,
   Command, Toaster, Flashes, Scroller, SidePanel, AlertDialog, Chip, Mono, Metric, StageHeading, Progress, Pills, Toggle,
-  Spinner, Callout, openMenu, alpha, Overline, Tiles, HubDownBody, AgentLogo,
+  Spinner, Callout, openMenu, alpha, Overline, Tiles, HubDownBody, AgentLogo, iconOf,
 } from "./ui.js";
 
 const ICONS = { run: "play", stop: "circle-stop", edit: "pencil", open: "file-text", talk: "message-circle", pause: "circle-pause", model: "sparkles", delete: "trash", worktree: "git-branch" };
@@ -510,7 +510,7 @@ export default class Routines {
     const fallback = agents.default || "claude";
     const named = (id) => installed.find((a) => a.id === id)?.name ?? id;
     // Each agent beside its logo, as everywhere an agent is named.
-    const logoed = (id, name) => h_flex().gap(6).items_center().child(AgentLogo(installed.find((a) => a.id === id)?.icon ?? "agent", { size: 13 })).child(name);
+    const logoed = (id, name) => h_flex().gap(6).items_center().child(AgentLogo(installed.find((a) => a.id === id) ?? { id }, { size: 13 })).child(name);
     const claude = (id) => (id || fallback) === "claude";
     const models = (id) => installed.find((a) => a.id === (id || fallback))?.models ?? [];
     const label = (text, hint) => h_flex().gap(8).items_center().child(div().text_size(TEXT.sm).font_medium().text_color(k.foreground).child(text)).when(Boolean(hint), (e) => e.child(div().text_size(TEXT.xs).text_color(k.mutedFg).child(hint)));
@@ -906,7 +906,7 @@ export default class Routines {
   agentIcon(id) {
     const agents = this.model?.agents ?? {};
     const want = id || agents.default || "claude";
-    return (agents.installed ?? []).find((a) => a.id === want)?.icon ?? "agent";
+    return iconOf((agents.installed ?? []).find((a) => a.id === want) ?? { id: want });
   }
 
   routineRow(row, k, sel) {

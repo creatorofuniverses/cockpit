@@ -64,6 +64,15 @@ const STDIO: &[(&str, &str)] = &[("type", "stdio")];
 /// (no MCP), Letta Code (servers per agent, no user file), Hermes (YAML) and Qoder (its file's shape is undocumented).
 pub const TARGETS: &[Target] = &[
     Target {
+        id: "openclaude",
+        name: "OpenClaude",
+        bin: "openclaude",
+        file: ".openclaude.json",
+        home_var: Some(("OPENCLAUDE_CONFIG_DIR", ".openclaude.json")),
+        shape: Shape::Servers(STDIO),
+        after: "",
+    },
+    Target {
         id: "codex",
         name: "Codex",
         bin: "codex",
@@ -493,6 +502,14 @@ mod tests {
         assert_eq!(by("cursor").entry("/c"), json!({"type": "stdio", "command": "/c", "args": ["mcp"]}));
         assert_eq!(by("omp").entry("/c"), json!({"type": "stdio", "enabled": true, "command": "/c", "args": ["mcp"]}));
         assert_eq!(by("qwen").entry("/c"), json!({"command": "/c", "args": ["mcp"]}));
+    }
+
+    #[test]
+    fn openclaude_connects_to_its_own_user_config() {
+        let target = by("openclaude");
+        assert_eq!(target.file, ".openclaude.json");
+        assert_eq!(target.home_var, Some(("OPENCLAUDE_CONFIG_DIR", ".openclaude.json")));
+        assert_eq!(target.entry("/acme/cockpit"), json!({"type": "stdio", "command": "/acme/cockpit", "args": ["mcp"]}));
     }
 
     #[test]

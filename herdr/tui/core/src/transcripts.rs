@@ -125,8 +125,16 @@ impl Transcript {
 pub type Stamp = (u64, u128);
 
 /// Every format with a reader.
-pub const KINDS: [Transcripts; 7] =
-    [Transcripts::Claude, Transcripts::Codex, Transcripts::Pi, Transcripts::Omp, Transcripts::Qwen, Transcripts::Copilot, Transcripts::Gemini];
+pub const KINDS: [Transcripts; 8] = [
+    Transcripts::Claude,
+    Transcripts::OpenClaude,
+    Transcripts::Codex,
+    Transcripts::Pi,
+    Transcripts::Omp,
+    Transcripts::Qwen,
+    Transcripts::Copilot,
+    Transcripts::Gemini,
+];
 
 impl Transcripts {
     /// The agent that writes this format (its id in `agent::all()`), for resuming a session found in it.
@@ -134,6 +142,7 @@ impl Transcripts {
         match self {
             Transcripts::None => "",
             Transcripts::Claude => "claude",
+            Transcripts::OpenClaude => "openclaude",
             Transcripts::Codex => "codex",
             Transcripts::Pi => "pi",
             Transcripts::Omp => "omp",
@@ -141,6 +150,11 @@ impl Transcripts {
             Transcripts::Copilot => "copilot",
             Transcripts::Gemini => "gemini",
         }
+    }
+
+    /// Whether this agent writes Claude-style JSONL transcripts.
+    pub fn claude_jsonl(self) -> bool {
+        matches!(self, Transcripts::Claude | Transcripts::OpenClaude)
     }
 }
 
@@ -150,6 +164,21 @@ impl Transcripts {
 /// Claude Code's own folder: `$CLAUDE_CONFIG_DIR` when set, else `~/.claude`.
 pub fn claude_home() -> PathBuf {
     std::env::var_os("CLAUDE_CONFIG_DIR").filter(|d| !d.is_empty()).map(PathBuf::from).unwrap_or_else(|| files::home().join(".claude"))
+}
+
+fn openclaude_home() -> PathBuf {
+    env_dir("OPENCLAUDE_CONFIG_DIR").unwrap_or_else(|| files::home().join(".openclaude"))
+}
+
+/// The native session id the agent registers for its process.
+pub fn process_session(kind: Transcripts, pid: u64) -> Option<String> {
+    let home = match kind {
+        Transcripts::Claude => claude_home(),
+        Transcripts::OpenClaude => openclaude_home(),
+        _ => return None,
+    };
+    let record = files::load(&home.join(format!("sessions/{pid}.json")))?;
+    record["sessionId"].as_str().filter(|s| !s.is_empty()).map(str::to_string)
 }
 
 fn env_dir(var: &str) -> Option<PathBuf> {
@@ -165,6 +194,7 @@ pub fn root(kind: Transcripts) -> Option<PathBuf> {
     match kind {
         Transcripts::None => None,
         Transcripts::Claude => Some(claude_home().join("projects")),
+        Transcripts::OpenClaude => Some(openclaude_home().join("projects")),
         Transcripts::Codex => Some(codex_home().join("sessions")),
         Transcripts::Pi => Some(env_dir("PI_CODING_AGENT_DIR").unwrap_or_else(|| files::home().join(".pi/agent")).join("sessions")),
         Transcripts::Omp => {
@@ -249,7 +279,7 @@ pub fn all_in(kind: Transcripts, root: &Path) -> BTreeMap<String, Stamp> {
     };
     match kind {
         Transcripts::None => {}
-        Transcripts::Claude => {
+        Transcripts::Claude | Transcripts::OpenClaude => {
             for file in children(root).iter().flat_map(|p| children(p)) {
                 let name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                 if name.ends_with(".jsonl") && !name.starts_with("agent-") {
@@ -283,7 +313,7 @@ pub fn find(kind: Transcripts, session: &str, cwd: &str) -> Option<PathBuf> {
     let root = root(kind)?;
     match kind {
         Transcripts::None => None,
-        Transcripts::Claude => {
+        Transcripts::Claude | Transcripts::OpenClaude => {
             let name = format!("{session}.jsonl");
             let direct = root.join(claude_folder(cwd)).join(&name);
             if direct.is_file() {
@@ -315,7 +345,7 @@ pub fn latest(kind: Transcripts, cwd: &str, since_ms: u64) -> Option<PathBuf> {
     let newest = |files: Vec<PathBuf>| files.into_iter().max_by_key(|p| modified_ms(p));
     match kind {
         Transcripts::None => None,
-        Transcripts::Claude => {
+        Transcripts::Claude | Transcripts::OpenClaude => {
             let files = children(&root.join(claude_folder(cwd))).into_iter().filter(|p| p.extension().is_some_and(|e| e == "jsonl") && fresh(p)).collect();
             newest(files)
         }
@@ -344,7 +374,7 @@ pub fn id_of(kind: Transcripts, path: &Path) -> Option<String> {
     let stem = path.file_stem()?.to_str()?;
     match kind {
         Transcripts::None => None,
-        Transcripts::Claude => Some(stem.to_string()),
+        Transcripts::Claude | Transcripts::OpenClaude => Some(stem.to_string()),
         // rollout-2026-11-03T17-01-47-<uuid>
         Transcripts::Codex => (stem.len() > 36).then(|| stem[stem.len() - 36..].to_string()).filter(|id| id.chars().all(|c| c.is_ascii_hexdigit() || c == '-')),
         // <time>_<id>
@@ -432,7 +462,7 @@ pub fn read(kind: Transcripts, path: &Path) -> Option<Transcript> {
 pub fn read_detail(kind: Transcripts, path: &Path, detail: Detail) -> Option<Transcript> {
     let mut t = match kind {
         Transcripts::None => return None,
-        Transcripts::Claude => read_claude(path, detail)?,
+        Transcripts::Claude | Transcripts::OpenClaude => read_claude(path, detail)?,
         Transcripts::Codex => read_codex(path, detail)?,
         Transcripts::Pi | Transcripts::Omp => read_pi(path, detail)?,
         Transcripts::Qwen => read_qwen(path, detail)?,
@@ -458,7 +488,7 @@ pub fn usage(kind: Transcripts, path: &Path) -> Option<Usage> {
     let lines = tail.split(|b| *b == b'\n').rev();
     match kind {
         Transcripts::None => None,
-        Transcripts::Claude => lines.filter(|l| contains(l, b"\"usage\"")).find_map(|l| {
+        Transcripts::Claude | Transcripts::OpenClaude => lines.filter(|l| contains(l, b"\"usage\"")).find_map(|l| {
             let line: ClaudeLine = serde_json::from_slice(l).ok()?;
             let m = line.message.filter(|_| line.kind == "assistant" && line.is_sidechain != Some(true))?;
             let u = m.usage?;
@@ -504,8 +534,8 @@ pub enum Turn {
 /// Herdr. None for formats with no such events.
 pub fn turn(kind: Transcripts, path: &Path) -> Option<Turn> {
     match kind {
-        // Claude Code closes a turn with a `turn_duration` line; the bookkeeping it writes after says nothing.
-        Transcripts::Claude => {
+        // A turn closes with `turn_duration` or, in OpenClaude, an assistant message that ends the turn.
+        Transcripts::Claude | Transcripts::OpenClaude => {
             let tail = tail(path, TAIL)?;
             // From the end: a closed turn ended interrupted when its last message is the interruption.
             let mut closed = false;
@@ -517,6 +547,11 @@ pub fn turn(kind: Transcripts, path: &Path) -> Option<Turn> {
                 match (v["type"].as_str().unwrap_or_default(), v["subtype"].as_str().unwrap_or_default()) {
                     ("system", "turn_duration") => closed = true,
                     ("user", _) if interruption(&v["message"]["content"]) => return Some(Turn::Interrupted),
+                    ("assistant", _)
+                        if kind == Transcripts::OpenClaude && matches!(v["message"]["stop_reason"].as_str(), Some("end_turn" | "stop_sequence")) =>
+                    {
+                        return Some(Turn::Done);
+                    }
                     ("assistant" | "user", _) => return Some(if closed { Turn::Done } else { Turn::Working }),
                     _ => {}
                 }
@@ -995,7 +1030,7 @@ impl Follow {
             self.update(now)?;
         }
         match self.kind {
-            Transcripts::Claude => self.fold.as_ref().filter(|f| f.prompt.is_some() && !f.t.id.is_empty()).map(|f| &f.t),
+            Transcripts::Claude | Transcripts::OpenClaude => self.fold.as_ref().filter(|f| f.prompt.is_some() && !f.t.id.is_empty()).map(|f| &f.t),
             _ => self.read.as_ref(),
         }
     }
@@ -1004,7 +1039,7 @@ impl Follow {
         // A file that only grew is read on from where the last read stopped; anything else is read again.
         let grown = self.stamp.is_some_and(|(len, _)| now.0 >= len);
         self.stamp = None;
-        if self.kind != Transcripts::Claude {
+        if !self.kind.claude_jsonl() {
             self.read = read_detail(self.kind, &self.path, self.detail);
             self.stamp = Some(now);
             return Some(());
@@ -1017,10 +1052,10 @@ impl Follow {
         fold.name();
         if let Some(title) = fold.title() {
             fold.t.title = tidy(&title);
-            fold.t.kind = Transcripts::Claude;
+            fold.t.kind = self.kind;
             fold.t.path = self.path.clone();
             if fold.t.id.is_empty() {
-                fold.t.id = id_of(Transcripts::Claude, &self.path).unwrap_or_default();
+                fold.t.id = id_of(self.kind, &self.path).unwrap_or_default();
             }
         }
         self.stamp = Some(now);
@@ -1677,6 +1712,38 @@ mod tests {
         assert!(!is_typed("</image>"));
         assert!(!is_typed("# AGENTS.md instructions for /r/api"));
         assert!(!is_typed("[Request interrupted by user]"));
+    }
+
+    #[test]
+    fn openclaude_reads_its_own_project_and_process_registry() {
+        let dir = tempfile::tempdir().unwrap();
+        let _homes = Homes::set(&[("OPENCLAUDE_CONFIG_DIR", dir.path())]);
+        let kind = Transcripts::OpenClaude;
+        let cwd = "/home/maya/acme/api";
+        let session = "c0ffeeba-1234-4abc-8def-123456789012";
+        let project = format!("projects/{}/{session}.jsonl", claude_folder(cwd));
+        let path = write(
+            dir.path(),
+            &project,
+            &[
+                json!({"type": "user", "cwd": cwd, "sessionId": session, "message": {"role": "user", "content": "Ship ENG-412"}}),
+                json!({"type": "assistant", "message": {"role": "assistant", "model": "acme/model", "content": "Ready", "stop_reason": "end_turn",
+                    "usage": {"input_tokens": 120}}}),
+                json!({"type": "last-prompt", "lastPrompt": "Ship ENG-412"}),
+            ],
+        );
+        write(dir.path(), "sessions/412.json", &[json!({"sessionId": session})]);
+        assert_eq!(process_session(kind, 412).as_deref(), Some(session));
+        assert_eq!(kind_of(&path), Some(kind));
+        assert_eq!(find(kind, session, cwd), Some(path.clone()));
+        assert!(all(kind).contains_key(path.to_str().unwrap()));
+        let read = read(kind, &path).unwrap();
+        assert_eq!((read.kind.agent(), read.id.as_str(), read.title.as_str()), ("openclaude", session, "Ship ENG-412"));
+        assert_eq!(Follow::new(kind, &path, Detail::Words).read(), Some(&read));
+        assert_eq!(turn(kind, &path), Some(Turn::Done));
+        assert_eq!(usage(kind, &path).unwrap().context, Some(120));
+        let tool = write(dir.path(), "projects/acme/tool.jsonl", &[json!({"type": "assistant", "message": {"role": "assistant", "stop_reason": "tool_use"}})]);
+        assert_eq!(turn(kind, &tool), Some(Turn::Working));
     }
 
     #[test]

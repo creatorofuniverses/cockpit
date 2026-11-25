@@ -390,7 +390,7 @@ export default class Start {
     const agent = agentOf(p, this.s);
     const mode = this.s.mode ?? (p.mode || c.mode || "default");
     const repos = (c.repos ?? []).map((r) => [r, r]);
-    const agents = (c.agents ?? []).map((a) => [a.id, h_flex().gap(6).items_center().child(AgentLogo(a.icon ?? "agent", { size: 13 })).child(a.installed ? a.name : `${a.name} (not installed)`)]);
+    const agents = (c.agents ?? []).map((a) => [a.id, h_flex().gap(6).items_center().child(AgentLogo(a, { size: 13 })).child(a.installed ? a.name : `${a.name} (not installed)`)]);
     const modes = (agent?.modes ?? []).map((m) => [m.id, m.label]);
     const pr = p.kind === "pr";
     const what = resolved(p);

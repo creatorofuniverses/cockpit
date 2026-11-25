@@ -212,7 +212,7 @@ fn app_live(t: &Value, core: &Value, place: Place) -> Option<Live> {
     let cwd = core["cwd"].as_str().unwrap_or_default().to_string();
     // herdr-core's own word for the agent it runs, reported or not.
     let detected = core["agent"].as_str().filter(|a| !a.is_empty());
-    let reported = t["status"].as_str().filter(|s| !s.is_empty());
+    let reported = t["status"].as_str().filter(|s| !s.is_empty() && *s != "unknown");
     let program = t["app"].as_str().filter(|a| !a.is_empty()).or(detected).unwrap_or("agent").to_string();
     let agent = agent::of_program(&program);
     let handle = format!("{APP}{address}");
@@ -224,13 +224,23 @@ fn app_live(t: &Value, core: &Value, place: Place) -> Option<Live> {
         (None, Some(a)) => (Some(a.clone()), a.bin),
         (agent, _) => (agent, program),
     };
+    if agent.as_ref().is_some_and(Agent::probe_foreground)
+        && (core["state"] == "exited"
+            || found.got["state"] == "exited"
+            || (found.got["foreground"].is_object() && foreground_agent(&found.got).as_ref() != agent.as_ref()))
+    {
+        return None;
+    }
     // Herdr reports no status for a Claude Code session attached from the background (`claude --bg`, a job): its title's
     // spinner says whether it works. An agent with no Herdr status otherwise takes it from its transcript's last turn.
     let (status, title) = match reported {
         Some(status) => (status_word(status), t["name"].as_str().map(str::to_string).unwrap_or_default()),
         None => match attached_claude(&found.got) {
             Some(found) => found,
-            None => (unreported(agent.as_ref(), &found)?, found.got["title"].as_str().unwrap_or_default().to_string()),
+            None => (
+                unreported(agent.as_ref(), &found).or_else(|| agent.as_ref().filter(|a| a.probe_foreground()).map(|_| "idle".into()))?,
+                found.got["title"].as_str().unwrap_or_default().to_string(),
+            ),
         },
     };
     let background = background(agent.as_ref(), found.transcript.as_deref(), &found.got, &status);
@@ -278,42 +288,49 @@ const LOOK_AGAIN: Duration = Duration::from_secs(10);
 /// An app terminal's `hc get` (again when `fresh`, else every LOOK_AGAIN) and its session, found again every
 /// LOOK_AGAIN: Herdr app terminals report none.
 fn app_session(handle: &str, address: &str, agent: Option<&Agent>, cwd: &str, fresh: bool) -> Found {
-    static KNOWN: Mutex<Option<HashMap<String, (Instant, Found)>>> = Mutex::new(None);
+    type Known = HashMap<(String, String), (Instant, Found)>;
+    static KNOWN: Mutex<Option<Known>> = Mutex::new(None);
+    let key = (handle.to_string(), cwd.to_string());
     let cached = KNOWN
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .get_or_insert_with(HashMap::new)
-        .get(handle)
+        .get(&key)
         .filter(|(at, _)| at.elapsed() < LOOK_AGAIN)
         .map(|(_, f)| f.clone());
     if let Some(found) = &cached
         && !fresh
+        && found.agent.as_ref() == agent
     {
         return found.clone();
     }
     let got = json_of(hc(&["get", address, "--json"]));
-    if let Some(found) = cached {
+    if let Some(found) = cached
+        && got["foreground"] == found.got["foreground"]
+        && got["created_ms"] == found.got["created_ms"]
+        && !found.agent.as_ref().or(agent).is_some_and(Agent::probe_foreground)
+        && agent::foreground(&got["foreground"]).is_none()
+    {
         return Found { got, ..found };
     }
-    let argv: Vec<String> = got["foreground"]["argv"].as_array().into_iter().flatten().filter_map(|a| a.as_str().map(str::to_string)).collect();
-    let pid = got["foreground"]["pid"].as_u64();
+    let argv = process_argv(&got["foreground"]);
     let cwd = if cwd.is_empty() { got["cwd"].as_str().unwrap_or_default() } else { cwd };
     let reported = got["agent_session"].as_str().or(got["agent_session"]["value"].as_str());
     let agent = agent.cloned().or_else(|| foreground_agent(&got));
     let (session, transcript) = match &agent {
-        Some(a) => which(a, reported, None, pid, &argv, cwd, got["created_ms"].as_u64().unwrap_or(0)),
+        Some(a) => which(a, reported, None, a.session_pid(&got["foreground"]), &argv, cwd, got["created_ms"].as_u64().unwrap_or(0)),
         None => (None, None),
     };
     let found = Found { got, session, transcript, agent };
     let mut known = KNOWN.lock().unwrap_or_else(|e| e.into_inner());
     let known = known.get_or_insert_with(HashMap::new);
     known.retain(|_, (at, _)| at.elapsed() < LOOK_AGAIN * 30);
-    known.insert(handle.to_string(), (Instant::now(), found.clone()));
+    known.insert(key, (Instant::now(), found.clone()));
     found
 }
 
 /// Which session a terminal's agent holds, and its transcript: what Herdr reports (an id or the transcript's path),
-/// else Claude Code's own registry by the agent's process, else a session id on its command line (`codex resume
+/// else the agent's own registry by process, else a session id on its command line (`codex resume
 /// <id>`), else the newest session the agent started in the terminal's folder since the terminal did.
 pub fn which(
     agent: &Agent,
@@ -336,9 +353,7 @@ pub fn which(
     if let Some(id) = reported {
         return (Some(id.to_string()), transcripts::find(kind, id, cwd).map(shown));
     }
-    if kind == Transcripts::Claude
-        && let Some(id) = pid.and_then(claude_session_of)
-    {
+    if let Some(id) = pid.and_then(|pid| transcripts::process_session(kind, pid)) {
         let transcript = transcripts::find(kind, &id, cwd).map(shown);
         return (Some(id), transcript);
     }
@@ -347,16 +362,14 @@ pub fn which(
         return (Some(id), Some(shown(p)));
     }
     // Without the terminal's start, the newest session in its folder could be any older one.
-    match (since > 0).then(|| transcripts::latest(kind, cwd, since)).flatten() {
+    match (since > 0 && !agent.probe_foreground()).then(|| transcripts::latest(kind, cwd, since)).flatten() {
         Some(p) => (transcripts::id_of(kind, &p), Some(shown(p))),
         None => (None, None),
     }
 }
 
-/// The session Claude Code notes for one of its processes: `~/.claude/sessions/<pid>.json`.
-fn claude_session_of(pid: u64) -> Option<String> {
-    let v = files::load(&transcripts::claude_home().join(format!("sessions/{pid}.json")))?;
-    v["sessionId"].as_str().filter(|s| !s.is_empty()).map(str::to_string)
+fn process_argv(process: &Value) -> Vec<String> {
+    process["argv"].as_array().into_iter().flatten().filter_map(|a| a.as_str().map(str::to_string)).collect()
 }
 
 fn agent_id(program: &str) -> String {
@@ -366,7 +379,8 @@ fn agent_id(program: &str) -> String {
 /// The agent a terminal's foreground process is, from its name: a frontend naming none still runs one when the agent
 /// was started through a shell.
 fn foreground_agent(got: &Value) -> Option<Agent> {
-    agent::of_program(Path::new(got["foreground"]["name"].as_str()?).file_name()?.to_str()?)
+    let foreground = &got["foreground"];
+    agent::foreground(foreground).or_else(|| agent::of_program(Path::new(foreground["name"].as_str()?).file_name()?.to_str()?))
 }
 
 /// A resting agent that closed its turn is done until the person looks at it; only its transcript tells the two apart.
@@ -387,13 +401,16 @@ fn background(agent: Option<&Agent>, transcript: Option<&str>, got: &Value, stat
 fn unreported(agent: Option<&Agent>, found: &Found) -> Option<String> {
     let agent = agent?;
     let path = found.transcript.as_deref()?;
-    let word = match transcripts::turn(agent.transcripts, Path::new(path)) {
+    Some(transcript_status(agent, path).to_string())
+}
+
+fn transcript_status(agent: &Agent, path: &str) -> &'static str {
+    match transcripts::turn(agent.transcripts, Path::new(path)) {
         Some(Turn::Working) => "working",
         Some(Turn::Blocked) => "blocked",
         Some(Turn::Done | Turn::Interrupted) => "done",
         None => "idle",
-    };
-    Some(word.to_string())
+    }
 }
 
 /// How full its context is, in percent, from its transcript where the format gives the window; read again only when
@@ -423,7 +440,7 @@ fn context_of(agent: Option<&Agent>, transcript: Option<&str>) -> Option<f64> {
 /// there when it waits), with the title past the glyph.
 fn attached_claude(t: &Value) -> Option<(String, String)> {
     let name = t["foreground"]["name"].as_str().unwrap_or_default();
-    if !name.contains("claude") {
+    if agent::of_program(name).is_none_or(|a| a.transcripts != Transcripts::Claude) {
         return None;
     }
     let title = t["title"].as_str().unwrap_or_default().trim();
@@ -450,7 +467,15 @@ pub fn take_tui_listing() -> Option<(Value, Value)> {
 }
 
 fn tui_list() -> Vec<Live> {
-    let panes = json_of(herdr(&["pane", "list"]));
+    let probes = agent::all().iter().filter(|a| a.probe_foreground() && a.installed()).any(|a| {
+        let pattern = format!(r"(^|[/[:space:]]){}([[:space:]]|$)", a.id);
+        Command::new("pgrep").args(["-f", &pattern]).stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|s| s.success())
+    });
+    tui_list_with_probe(probes)
+}
+
+fn tui_list_with_probe(probe: bool) -> Vec<Live> {
+    let mut panes = json_of(herdr(&["pane", "list"]));
     let spaces = json_of(herdr(&["workspace", "list"]));
     // A pane's tab label, which the person or another tool may have typed; none where it is not listed, never the
     // terminal's title, which the agent writes and which `title` carries.
@@ -458,9 +483,6 @@ fn tui_list() -> Vec<Live> {
     let tab_label = |id: &str| -> Option<String> {
         tabs["result"]["tabs"].as_array()?.iter().find(|t| t["tab_id"] == id).and_then(|t| t["label"].as_str()).map(str::to_string)
     };
-    if !panes.is_null() && !spaces.is_null() {
-        *TUI_LISTING.lock().unwrap_or_else(|e| e.into_inner()) = Some((spaces.clone(), panes.clone()));
-    }
     let label = |id: &str| -> String {
         let l = spaces["result"]["workspaces"]
             .as_array()
@@ -475,22 +497,29 @@ fn tui_list() -> Vec<Live> {
         }
     };
     let mut out = Vec::new();
-    for p in panes["result"]["panes"].as_array().into_iter().flatten() {
-        let Some(agent) = p["agent"].as_str() else { continue };
+    for p in panes.get_mut("result").and_then(|r| r.get_mut("panes")).and_then(Value::as_array_mut).into_iter().flatten() {
         let s = |k: &str| p[k].as_str().unwrap_or_default().to_string();
+        let agent = p["agent"].as_str().filter(|a| !a.is_empty());
+        let probed = if agent.is_none() && probe { frontend::pane_foreground(&s("pane_id")) } else { None };
+        let Some(program) = agent.or_else(|| probed.as_ref().map(|(agent, _)| agent.id.as_str())) else { continue };
         let context = p["tokens"].as_object().and_then(|t| ["ctx_ok", "ctx_warn", "ctx_hot"].iter().find_map(|k| t.get(*k)?.as_str())).and_then(percent_in);
-        let cwd = p["foreground_cwd"].as_str().or(p["cwd"].as_str()).unwrap_or_default().to_string();
-        let found = agent::of_program(agent);
+        let process = probed.as_ref().map(|(_, p)| p).unwrap_or(&Value::Null);
+        let cwd = process["cwd"].as_str().or(p["foreground_cwd"].as_str()).or(p["cwd"].as_str()).unwrap_or_default().to_string();
+        let found = agent::of_program(program);
         // Herdr's integrations report a session as its id or its transcript's path.
         let reported = &p["agent_session"];
         let path = reported["path"].as_str().or_else(|| (reported["kind"] == "path").then(|| reported["value"].as_str()).flatten());
         let id = (reported["kind"] != "path").then(|| reported["value"].as_str()).flatten();
-        let pid = ["foreground_pid", "pid"].iter().find_map(|k| p[*k].as_u64());
+        let pid = found.as_ref().and_then(|a| a.session_pid(process)).or_else(|| ["foreground_pid", "pid"].iter().find_map(|k| p[*k].as_u64()));
         let (session, transcript) = match &found {
+            Some(a) if a.probe_foreground() => which(a, id, path, pid, &process_argv(process), &cwd, 0),
             Some(a) => tui_session(&s("pane_id"), a, id, path, pid, &cwd),
             None => (id.map(str::to_string), path.map(str::to_string)),
         };
-        let status = finished(found.as_ref(), transcript.as_deref(), status_word(p["agent_status"].as_str().unwrap_or("idle")));
+        let status = match p["agent_status"].as_str().filter(|s| *s != "unknown") {
+            Some(status) => finished(found.as_ref(), transcript.as_deref(), status_word(status)),
+            None => found.as_ref().zip(transcript.as_deref()).map_or("idle", |(a, path)| transcript_status(a, path)).to_string(),
+        };
         out.push(Live {
             handle: s("pane_id"),
             address: s("pane_id"),
@@ -500,7 +529,7 @@ fn tui_list() -> Vec<Live> {
             tab_id: s("tab_id"),
             tab_name: tab_label(&s("tab_id")).unwrap_or_default(),
             title: s("terminal_title_stripped"),
-            program: agent.to_string(),
+            program: program.to_string(),
             agent: found.as_ref().map(|a| a.id.clone()).unwrap_or_default(),
             status,
             context: context.or_else(|| context_of(found.as_ref(), transcript.as_deref())),
@@ -508,10 +537,19 @@ fn tui_list() -> Vec<Live> {
             session,
             transcript,
             pid: pid.map(|p| p as u32),
-            roots: ["pid", "foreground_pid"].iter().filter_map(|k| p[*k].as_u64()).map(|p| p as u32).collect(),
+            roots: p["pid"].as_u64().filter(|p| Some(*p) != pid).into_iter().chain(pid).map(|p| p as u32).collect(),
             since: None,
             background: None,
         });
+        if probed.is_some()
+            && let Some(live) = out.last()
+        {
+            p["agent"] = json!(live.agent);
+            p["agent_status"] = json!(live.status);
+        }
+    }
+    if !panes.is_null() && !spaces.is_null() {
+        *TUI_LISTING.lock().unwrap_or_else(|e| e.into_inner()) = Some((spaces, panes));
     }
     out
 }
@@ -676,12 +714,22 @@ mod tests {
             {"address": "t2", "agent": "codex", "cwd": "/home/maya/acme/web", "state": "live", "status": "working", "where": "acme/web"},
             {"address": "t3", "agent": "", "cwd": "/home/maya", "state": "live", "where": "acme/api / 2"},
             {"address": "t4", "agent": "claude", "cwd": "/home/maya", "name": "cockpit-fetch", "state": "live"},
+            {"address": "t5", "agent": "openclaude", "cwd": "/home/maya/acme/api", "state": "live", "where": "acme/api / 3"},
+            {"address": "t6", "agent": "openclaude", "cwd": "/home/maya/acme/api", "state": "live", "where": "acme/api / 4"},
         ]});
         let got = |t: &str, space: &str, tab: &str, program: &str| {
             json!({"address": t, "pid": 4242, "created_ms": 0, "foreground": {"name": program, "argv": [program], "pid": 4_000_000_001_u64},
                    "labels": {"herdr.space": space, "herdr.tab": tab}})
         };
-        let gets = [("t1", got("t1", "sp1", "tb1", "claude")), ("t2", got("t2", "sp2", "tb2", "codex")), ("t3", got("t3", "sp1", "tb3", "bash"))];
+        let mut openclaude = got("t5", "sp1", "tb5", "MainThread");
+        openclaude["foreground"]["argv"] = json!(["node", "/acme/bin/openclaude"]);
+        let gets = [
+            ("t1", got("t1", "sp1", "tb1", "claude")),
+            ("t2", got("t2", "sp2", "tb2", "codex")),
+            ("t3", got("t3", "sp1", "tb3", "bash")),
+            ("t5", openclaude),
+            ("t6", got("t6", "sp1", "tb6", "bash")),
+        ];
         let mut script = format!("#!/bin/sh\ncase \"$1 $2\" in\n\"ls --json\") echo '{ls}' ;;\n");
         for (t, g) in &gets {
             script += &format!("\"get {t}\") echo '{g}' ;;\n");
@@ -697,8 +745,12 @@ mod tests {
         let shown: Vec<_> = lives.iter().map(|l| (l.handle.as_str(), l.agent.as_str(), l.status.as_str(), l.cwd.as_str())).collect();
         assert_eq!(
             shown,
-            [("app:t1", "claude", "done", "/home/maya/acme/api"), ("app:t2", "codex", "working", "/home/maya/acme/web")],
-            "a shell and the hub's fetcher are no agents"
+            [
+                ("app:t1", "claude", "done", "/home/maya/acme/api"),
+                ("app:t2", "codex", "working", "/home/maya/acme/web"),
+                ("app:t5", "openclaude", "idle", "/home/maya/acme/api"),
+            ],
+            "OpenClaude appears before it writes a transcript, and disappears when the foreground returns to a shell"
         );
         let place = |l: &Live| (l.space_id.clone(), l.space_name.clone(), l.tab_id.clone(), l.tab_name.clone());
         assert_eq!(place(&lives[0]), ("sp1".into(), "acme/api".into(), "tb1".into(), "1".into()), "the space and tab the app placed it in");
@@ -713,26 +765,34 @@ mod tests {
             json!({"pane_id": id, "tab_id": tab, "workspace_id": "w1", "agent": "amp", "agent_status": "idle", "cwd": "/home/maya/acme/api",
                    "terminal_title_stripped": "✳ Amp"})
         };
-        let panes = json!({"result": {"panes": [pane("w1:p1", "w1:t1"), pane("w1:p2", "w1:t2")]}});
+        let unknown = |pane: &str| json!({"pane_id": pane, "workspace_id": "w1", "agent_status": "unknown"});
+        let panes = json!({"result": {"panes": [pane("w1:p1", "w1:t1"), pane("w1:p2", "w1:t2"), unknown("w1:p3"), unknown("w1:p4")]}});
         let spaces = json!({"result": {"workspaces": [{"workspace_id": "w1", "label": "acme/api"}]}});
         // Herdr 0.9.5 labels a new tab with its number; the second tab is not in this listing.
         let tabs = json!({"result": {"tabs": [{"tab_id": "w1:t1", "label": "2", "number": 2}]}});
+        let processes = |entries: Value| json!({"result": {"process_info": {"foreground_processes": entries}}});
+        let openclaude = processes(json!([{"name": "openclaude", "cwd": "/home/maya/acme/api", "pid": 4_000_000_001_u64}]));
+        let shell = processes(json!([{"name": "bash", "argv": ["bash", "-c", "echo openclaude"]}]));
         let script = format!(
-            "#!/bin/sh\ncase \"$1 $2\" in\n\"pane list\") echo '{panes}' ;;\n\"workspace list\") echo '{spaces}' ;;\n\"tab list\") echo '{tabs}' ;;\n*) exit 1 ;;\nesac\n"
+            "#!/bin/sh\ncase \"$1 $2\" in\n\"pane list\") echo '{panes}' ;;\n\"workspace list\") echo '{spaces}' ;;\n\"tab list\") echo '{tabs}' ;;\n\"pane process-info\") case \"$4\" in w1:p3) echo '{openclaude}' ;; w1:p4) echo '{shell}' ;; *) exit 1 ;; esac ;;\n*) exit 1 ;;\nesac\n"
         );
         let herdr = dir.path().join("herdr");
         std::fs::write(&herdr, script).unwrap();
         std::fs::set_permissions(&herdr, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
         // SAFETY: the only test of this crate that reads HERDR_BIN_PATH.
         unsafe { std::env::set_var("HERDR_BIN_PATH", &herdr) };
-        let lives = tui_list();
+        let lives = tui_list_with_probe(true);
         unsafe { std::env::remove_var("HERDR_BIN_PATH") };
-        let tabs: Vec<(&str, &str, &str)> = lives.iter().map(|l| (l.handle.as_str(), l.tab_name.as_str(), l.title.as_str())).collect();
+        assert_eq!(lives.len(), 3, "the shell is not an agent");
+        let openclaude = &lives[2];
+        assert_eq!((openclaude.handle.as_str(), openclaude.agent.as_str(), openclaude.status.as_str()), ("w1:p3", "openclaude", "idle"));
+        assert_eq!(openclaude.cwd, "/home/maya/acme/api");
+        let tabs: Vec<(&str, &str, &str)> = lives[..2].iter().map(|l| (l.handle.as_str(), l.tab_name.as_str(), l.title.as_str())).collect();
         assert_eq!(tabs, [("w1:p1", "2", "✳ Amp"), ("w1:p2", "", "✳ Amp")], "an unlisted tab has no label: the title stays the title");
         let amp = agent::builtin().into_iter().find(|a| a.id == "amp");
         let known = cockpit_core::names::agent_names("amp", amp.as_ref());
         let known: Vec<&str> = known.iter().map(String::as_str).collect();
-        assert!(lives.iter().all(|l| cockpit_core::names::default_label(&l.tab_name, &known)));
+        assert!(lives[..2].iter().all(|l| cockpit_core::names::default_label(&l.tab_name, &known)));
     }
 
     #[test]

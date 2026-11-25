@@ -45,6 +45,12 @@ itself and need no `tools`.
 | `servers` | The MCP servers cockpit calls itself, with their URL or command. Written by setup for agents other than Claude Code. |
 | `refresh` | Seconds between fetches, per source (`github`, `tickets`, `ci`, `mail`, `calendar`, `platform`, `monitor`). |
 
+## OpenClaude
+
+OpenClaude appears in the agent picker when its executable is installed. Cockpit reads its history from
+`~/.openclaude/projects`, or from `$OPENCLAUDE_CONFIG_DIR/projects` when set. Run
+`cockpit agents connect openclaude` to add cockpit's MCP tools to OpenClaude's user configuration.
+
 ## What cockpit does on its own
 
 | Key | Default | What it does |
