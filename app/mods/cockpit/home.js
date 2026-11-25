@@ -118,12 +118,8 @@ export default class Home {
     this.pinned = null;
     this.events = [];
     this.loadEvents(cx);
-    cx.spawn(async (cx) => {
-      try {
-        const text = await hub.configText();
-        const spaces = text ? JSON.parse(text).spaces : null;
-        if (Array.isArray(spaces)) this.pinned = spaces.map((s) => (typeof s === "string" ? s : s.name));
-      } catch {}
+    const onState = hub.followPinnedSpaces(cx, (spaces, cx) => {
+      this.pinned = spaces;
       cx.notify();
     });
     this.sub = following(
@@ -139,6 +135,7 @@ export default class Home {
         cx.notify();
       },
       (state, cx) => {
+        onState(state, cx);
         this.status = state;
         // It stays until the hub answers: the retries between say "connecting" and would make the panel blink.
         if (state === "live") this.notInstalled = false;

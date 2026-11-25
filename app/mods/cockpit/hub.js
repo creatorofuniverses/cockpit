@@ -135,12 +135,33 @@ export async function install() {
   return installed.value;
 }
 
-/** cockpit's config.json, as the hub resolved it else as written, read on the machine the hub runs on; null when neither is there. */
-export async function configText() {
+/** The saved space selection on the hub's machine, with the resolved copy for settings that need parsing or migration. */
+export async function pinnedSpaces() {
   const { cache, home, machine } = await install();
   const on = machine ? { on: machine } : undefined;
-  const read = (path) => readTextFile(path, on).catch(() => null);
-  return (await read(`${cache}/config.json`)) ?? (await read(`${home}/.config/cockpit/config.json`));
+  for (const path of [`${home}/.config/cockpit/config.json`, `${cache}/config.json`]) {
+    try {
+      const spaces = JSON.parse(await readTextFile(path, on))?.spaces;
+      if (Array.isArray(spaces)) return spaces.map((s) => (typeof s === "string" ? s : s?.name)).filter((s) => typeof s === "string" && s);
+    } catch {}
+  }
+  return null;
+}
+
+/** Reads the space selection at startup and on connection, keeping the last good selection during a failed read. */
+export function followPinnedSpaces(cx, onSpaces) {
+  let request = 0;
+  const refresh = (cx) => {
+    const attempt = ++request;
+    cx.spawn(async (cx) => {
+      const spaces = await pinnedSpaces().catch(() => null);
+      if (spaces !== null && attempt === request) onSpaces(spaces, cx);
+    });
+  };
+  refresh(cx);
+  return (state, cx) => {
+    if (state === "live") refresh(cx);
+  };
 }
 
 /** hub.json as written; a read the window never answers (a copy made in the middle of a layout switch) gives up. */

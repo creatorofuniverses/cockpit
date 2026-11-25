@@ -52,8 +52,9 @@ async function fixture(t, remote = true, globals = {}, host = "127.0.0.1") {
         calls.push(["read", path, options]);
         if (path === "C:/Herdr/cockpit.json") return JSON.stringify(install);
         if (path.endsWith("/hub.stopped")) return behavior.stopped ? "" : null;
-        if (behavior.noInfo) return null;
         assert.equal(options?.on, install.machine);
+        if (path.endsWith("/config.json")) return behavior.configFiles?.[path] ?? null;
+        if (behavior.noInfo) return null;
         return JSON.stringify(info);
       },
       exec: async (...args) => {
@@ -641,8 +642,32 @@ test("a window that came up before its hub goes live as soon as hub.json names o
   sidebar.stop();
 });
 
-test("the config a window reads comes from the machine the hub runs on", async t => {
+test("the desktop uses the runner's saved spaces ahead of an older resolved list", async t => {
   const f = await fixture(t);
-  assert.ok(await f.hub.configText());
-  assert.deepEqual(f.calls.filter(c => c[0] === "read" && c[1].endsWith("config.json")).map(c => [c[1], c[2]?.on]), [["/runner/cache/config.json", "runner"]]);
+  const raw = "/runner/.config/cockpit/config.json", cached = "/runner/cache/config.json";
+  f.behavior.configFiles = {
+    [raw]: JSON.stringify({ spaces: ["inbox", { name: "to-do" }] }),
+    [cached]: JSON.stringify({ spaces: ["inbox", "runbook", "meetings"] }),
+  };
+  assert.deepEqual(Array.from(await f.hub.pinnedSpaces()), ["inbox", "to-do"]);
+  assert.deepEqual(f.calls.filter(c => c[0] === "read" && c[1].endsWith("config.json")).map(c => [c[1], c[2]?.on]), [[raw, "runner"]]);
+  f.behavior.configFiles[raw] = '{ "spaces": [] }';
+  assert.deepEqual(Array.from(await f.hub.pinnedSpaces()), []);
+  f.behavior.configFiles[raw] = '{ /* comment in the saved file */ }';
+  assert.deepEqual(Array.from(await f.hub.pinnedSpaces()), ["inbox", "runbook", "meetings"]);
+});
+
+test("pinned spaces load when the hub reconnects and survive a failed read", async t => {
+  const f = await fixture(t), r = runtime(t), lists = [];
+  const onState = f.hub.followPinnedSpaces(r.cx, spaces => lists.push(Array.from(spaces)));
+  await Promise.all(r.tasks);
+  assert.deepEqual(lists, []);
+  f.behavior.configFiles = { "/runner/cache/config.json": '{"spaces":["inbox","to-do"]}' };
+  onState("live", r.cx);
+  await Promise.all(r.tasks);
+  assert.deepEqual(lists, [["inbox", "to-do"]]);
+  delete f.behavior.configFiles;
+  onState("live", r.cx);
+  await Promise.all(r.tasks);
+  assert.deepEqual(lists, [["inbox", "to-do"]]);
 });

@@ -116,10 +116,11 @@ export default class Sidebar {
     cx.spawn(async (cx) => {
       try {
         this.install = await hub.install();
-        const text = await hub.configText();
-        const pinned = text ? JSON.parse(text).spaces : null;
-        if (Array.isArray(pinned)) this.spaces = pinned.map((s) => (typeof s === "string" ? s : s.name));
       } catch {}
+      cx.notify();
+    });
+    const onState = hub.followPinnedSpaces(cx, (spaces, cx) => {
+      this.spaces = spaces;
       cx.notify();
     });
     // The hub writes update.json every six hours; a window left open picks a newer cockpit up on its own.
@@ -142,7 +143,7 @@ export default class Sidebar {
       if (AUTO_APPS.includes(m.view)) this.found[m.view] = m.value?.state;
       if (m.notify) this.toast(m.notify, cx);
       cx.notify();
-    });
+    }, onState);
   }
 
   close() {
